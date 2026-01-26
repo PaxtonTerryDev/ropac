@@ -1,9 +1,11 @@
-# <project_name>
+# Ropac
 
-<project_description>
+Role based permission access framework.
 
-You can update the project data by running a simple find and replace on the values
+## Overview
 
-- <project_name>
-- <project_description>
-- <project_repo_name>
+Primarily, `Ropac` is a set of tools used to facilitate the safe transmission
+
+## Key Structures
+
+
