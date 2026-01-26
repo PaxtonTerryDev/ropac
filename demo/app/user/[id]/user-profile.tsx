@@ -11,23 +11,16 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { UserProfile } from "@/types/user"
 import { useState } from "react"
 
 interface UserProfileCardProps {
   userId: string;
 }
 
-interface UserData {
-  name: {
-    first: string;
-    last: string;
-  };
-  email: string;
-  dob: Date;
-}
 
 export function UserProfileCard({ userId }: UserProfileCardProps) {
-  const [user, setUser] = useState<UserData>({
+  const [user, setUser] = useState<UserProfile>({
     name: {
       first: "John",
       last: "Mayer",
