@@ -1,8 +1,8 @@
-import { TransferListItem } from "worker_threads";
-import { PermissionShorthand } from "../../demo/lib/permissions.js";
+import { PermissionShorthand } from "./permissions.js";
 import { ModelAPIRequest } from "./model-api-request.js";
 import { Permission } from "./permissions.js";
 import { MappedObject } from "./utils/types/mapped-object.js";
+import { objectMap } from "./utils/object-operators.js";
 
 type FieldView = {
   value: any | any[];
@@ -10,13 +10,36 @@ type FieldView = {
 }
 
 /** All keys of the provided base T with an associated value */
-type FieldValues<T> = MappedObject<T, any | any[]>
+export type FieldValues<T> = MappedObject<T, any | any[]>
 
 /** A map of Roles correlated to their respective permissions.  Used mainly in FieldPermissions, to map all the permissions for a particular field. */
-type RolePermissionsMap<Role> = Map<Role, Permission[] | PermissionShorthand>
+export type RolePermissionsMap<Role> = Map<Role, Permission[] | PermissionShorthand>
+
+/**
+ * A tuple type where index 0 is a role and index 1 is either an array of permissions, or a PermissionShorthand definition
+ */
+type RolePermissionMapDefinition<Role> = [Role, Permission[] | PermissionShorthand]
+
+/** 
+* Creates a new instance of a RolePermissionMap.  
+* @param rolePermissions RolePermissionMapDefinition objects
+*
+* @example
+* const permissionMap = newRolePermissionMap([adminRole, "CRUD"], [userRole, "R"])
+* */
+export function newRolePermissionsMap<Role>(...rolePermissions: RolePermissionMapDefinition<Role>[]): RolePermissionsMap<Role> {
+  return new Map([...rolePermissions])
+}
+
+/**
+ * Applies a single RolePermissionMap to each key in the provided data object.
+ */
+export function applySingleRolePermissionsMap<BaseObj extends object, Role>(data: BaseObj, permissionMap: RolePermissionsMap<Role>): FieldPermissions<BaseObj, Role> {
+  return objectMap(data, (_key, _value) => permissionMap);
+}
 
 /** All keys of the provided base T with an associated RolePermissionMap */
-type FieldPermissions<BaseObj, Role> = MappedObject<BaseObj, RolePermissionsMap<Role>>
+export type FieldPermissions<BaseObj, Role> = MappedObject<BaseObj, RolePermissionsMap<Role>>
 
 /** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */
 type FieldViews<T> = MappedObject<T, FieldView>;
@@ -27,7 +50,7 @@ export interface ModelResponse<Data, Action> {
 }
 
 // Provide the definitions needed to create both ModelControllers and ModelViews.
-export interface Model<Data, Args, Action, Role, AdditionalArgs = null> extends Controller<Data, Args, Action, Role, AdditionalArgs>, View<Data, Args, Action, Role> {}
+export interface Model<Data, Args, Action, Role, AdditionalArgs = null> extends Controller<Data, Args, Action, Role, AdditionalArgs>, View<Data, Args, Action, Role> { }
 
 export class ModelInstance<Data, Args, Action, Role, AdditionalArgs = null> {
   model: Model<Data, Args, Action, Role, AdditionalArgs>;
@@ -37,40 +60,33 @@ export class ModelInstance<Data, Args, Action, Role, AdditionalArgs = null> {
 
   createController(): Controller<Data, Args, Action, Role, AdditionalArgs> {
     const { getAdditionalArgs, getData, getPermissions, getActions } = this.model
-    return {
-      getAdditionalArgs,
-      getData,
-      getPermissions,
-      getActions
-    }
   }
 }
-
 
 // Used on the server to fetch model data and permissions, and map them together.
 // Responds to requests from a corresponding ModelView through the React hook.
 export interface Controller<Data, Args, Action, Role, AdditionalArgs = null> {
 
   /** Optionally get additional args for data and permission mapping. */
-  getAdditionalArgs?: (modelArgs?: Args) => Promise<AdditionalArgs>;
+  getAdditionalArgs?: (modelArgs?: Args) => Promise<AdditionalArgs> | AdditionalArgs;
 
   /** Should fetch the full data model values from storage */
-  getData: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Data>;
-  
+  getData: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Data> | Data;
+
   /** 
   * Should get the relevant permissions for each data field 
   * Is provided with the data returned from getData if data is required to accurately describe permissions 
   * */
-  getPermissions: (data: Data, modelArgs?: Args, args?: AdditionalArgs[]) => Promise<FieldPermissions<Data, Role>>;
+  getPermissions: (data: Data, modelArgs?: Args, args?: AdditionalArgs[]) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
 
   /** Should get all valid actions to be sent to the client */
-  getActions?: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Action[]>;
+  getActions?: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Action[]> | Action[];
 }
 
-export class ControllerInstance<Data, Args, Action, Role> {
-  controller: Model<Data, Args, Action, Role>;
+export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null> {
+  controller: Controller<Data, Args, Action, Role, AdditionalArgs>;
 
-  constructor(controller: Model<Data, Args, Action, Role>) {
+  constructor(controller: Controller<Data, Args, Action, Role, AdditionalArgs>) {
     this.controller = controller;
   }
 
