@@ -41,8 +41,7 @@ export function applySingleRolePermissionsMap<BaseObj extends object, Role>(data
 /** All keys of the provided base T with an associated RolePermissionMap */
 export type FieldPermissions<BaseObj, Role> = MappedObject<BaseObj, RolePermissionsMap<Role>>
 
-/** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */
-type FieldViews<T> = MappedObject<T, FieldView>;
+/** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */ type FieldViews<T> = MappedObject<T, FieldView>;
 
 export interface ModelResponse<Data, Action> {
   data: FieldViews<Data>,

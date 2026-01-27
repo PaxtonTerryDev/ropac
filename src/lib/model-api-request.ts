@@ -1,10 +1,11 @@
 import { IncomingHttpHeaders } from "node:http";
-// TODO: We need to come back to this -> This needs to be defined in a way that we can encapsulate the data in a serializable format, as its being sent from the server to the client.
-// We can't transmit a function signature, so we need to define a format that we can send our parameters in so that the client hook will always know how to get that data.
+import { ModelResponse } from "./models.js";
 
-// The idea here is to provide an interface where we can define the endpoints intended to access a model. 
-// We most likely need get and patch requests to objectively function, but for the other methods we can just plan on doing a quick check of the definition exists.
-// I think this will be a good place to centralize the endpoint definitions so they can be created by the Model and client hooks. 
+type ValidRequestHeaders = Record<keyof IncomingHttpHeaders, string>;
+
+interface RequestBody<Data> {
+  body?: keyof Data[];
+}
 
 export interface ModelAPIRequest<Data, Args> {
   url?: string;
@@ -16,26 +17,85 @@ export interface ModelAPIRequest<Data, Args> {
   delete?: DeleteRequest<Data>;
 }
 
-type ValidRequestHeaders = Record<keyof IncomingHttpHeaders, string>;
+type RequireUrlIfMissing<HasBaseUrl extends boolean> = HasBaseUrl extends true
+  ? { url?: string }
+  : { url: string };
 
-interface RequestBody<Data> {
-  body?: keyof Data[];
-}
-interface APIRequestBase {
-  /** Overrides the url property specified in the ModelApiRequest object */
-  url?: string;
-  /** Overrides the headers property specified in the ModelApiRequest object */
+type APIRequestBase<HasBaseUrl extends boolean = true> = RequireUrlIfMissing<HasBaseUrl> & {
   headers?: ValidRequestHeaders;
-}
+};
 
-interface GetRequest<Args> extends APIRequestBase {
+type GetRequest<Args, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & {
   params?: keyof Args[];
+};
+
+type PostRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
+
+type PutRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
+
+type PatchRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
+
+type DeleteRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
+
+export async function get<Data, Action>(
+  url: string,
+  headers?: Partial<ValidRequestHeaders>
+): Promise<ModelResponse<Data, Action>> {
+  const response = await fetch(url, {
+    method: "GET",
+    ...(headers && { headers }),
+  });
+  return response.json() as Promise<ModelResponse<Data, Action>>;
 }
 
-interface PostRequest<Data> extends APIRequestBase, RequestBody<Data> { }
+export async function post<Data, Action>(
+  url: string,
+  data: Data,
+  headers?: Partial<ValidRequestHeaders>
+): Promise<ModelResponse<Data, Action>> {
+  const response = await fetch(url, {
+    method: "POST",
+    body: JSON.stringify({ data }),
+    ...(headers && { headers }),
+  });
+  return response.json() as Promise<ModelResponse<Data, Action>>;
+}
 
-interface PutRequest<Data> extends APIRequestBase, RequestBody<Data> { }
+export async function patch<Data, Action>(
+  url: string,
+  data: Partial<Data>,
+  headers?: Partial<ValidRequestHeaders>
+): Promise<ModelResponse<Data, Action>> {
+  const response = await fetch(url, {
+    method: "PATCH",
+    body: JSON.stringify({ data }),
+    ...(headers && { headers }),
+  });
+  return response.json() as Promise<ModelResponse<Data, Action>>;
+}
 
-interface PatchRequest<Data> extends APIRequestBase, RequestBody<Data> { }
+export async function put<Data, Action>(
+  url: string,
+  data: Data,
+  headers?: Partial<ValidRequestHeaders>
+): Promise<ModelResponse<Data, Action>> {
+  const response = await fetch(url, {
+    method: "PUT",
+    body: JSON.stringify({ data }),
+    ...(headers && { headers }),
+  });
+  return response.json() as Promise<ModelResponse<Data, Action>>;
+}
 
-interface DeleteRequest<Data> extends APIRequestBase, RequestBody<Data> { }
+export async function del<Data, Action>(
+  url: string,
+  data: Partial<Data>,
+  headers?: Partial<ValidRequestHeaders>
+): Promise<ModelResponse<Data, Action>> {
+  const response = await fetch(url, {
+    method: "DELETE",
+    body: JSON.stringify({ data }),
+    ...(headers && { headers }),
+  });
+  return response.json() as Promise<ModelResponse<Data, Action>>;
+}
