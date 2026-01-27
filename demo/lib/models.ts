@@ -52,21 +52,23 @@ export function updatePermissionField<T extends object>(
   permissions: T,
   path: string,
   value: Permission[] | PermissionShorthand
-): T {
+): void {
   const keys = path.split('.');
+  let current: Record<string, unknown> = permissions as Record<string, unknown>;
 
-  function updateNested(obj: Record<string, unknown>, keyIndex: number): Record<string, unknown> {
-    const key = keys[keyIndex];
-    if (keyIndex === keys.length - 1) {
-      return { ...obj, [key]: value };
-    }
-    return {
-      ...obj,
-      [key]: updateNested(obj[key] as Record<string, unknown>, keyIndex + 1)
-    };
+  for (let i = 0; i < keys.length - 1; i++) {
+    current = current[keys[i]] as Record<string, unknown>;
   }
 
-  return updateNested(permissions as Record<string, unknown>, 0) as T;
+  current[keys[keys.length - 1]] = value;
+}
+
+export function updateRolePermission<R extends string>(
+  rolePermissions: Record<R, Permission[] | PermissionShorthand>,
+  role: R,
+  value: Permission[] | PermissionShorthand
+): void {
+  rolePermissions[role] = value;
 }
 /** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */ type FieldViews<T> = MappedObject<T, FieldView>;
 export interface ModelComposite<Data, Action> {
@@ -127,16 +129,23 @@ export interface Controller<Data, Args, Action, Role, AdditionalArgs = null> {
   /** Should fetch an array of all roles the (accessing) client possesses. */
   getClientRoles: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Role[]> | Role[]
 
-  /** 
-  * Should get the relevant permissions for each data field 
-  * Is provided with the data returned from getData if data is required to accurately describe permissions 
+  /**
+   * Optional step to modify client roles before permissions are applied.
+   * Receives the fetched roles and can add, remove, or replace them.
+   */
+  applyClientRoles?: (data: Data, roles: Role[], modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Role[]> | Role[];
+
+  /**
+  * Should get the relevant permissions for each data field
+  * Is provided with the data returned from getData if data is required to accurately describe permissions
   * */
   getPermissions: (data: Data, modelArgs?: Args, args?: AdditionalArgs[]) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
 
   /**
-   * Optional step to apply permissions.  Default behavior is to use the Role[] value from `getClientRoles` to apply permissions.
+   * Optional step to modify applied permissions after default role-based merging.
+   * Receives the already-merged permissions (shorthands) and can override specific fields.
    */
-  applyPermissions?: (data: Data, permissions: FieldPermissions<Data, Role>, roles: Role[], modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
+  applyPermissions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, roles: Role[], modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<AppliedPermissions<Data>> | AppliedPermissions<Data>;
 
   /** Should get all valid actions to be sent to the client */
   getActions?: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Action[]> | Action[];
@@ -183,12 +192,16 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
       : null;
 
     const data = await this.controller.getData(args);
-    const roles = await this.controller.getClientRoles(args);
+    const fetchedRoles = await this.controller.getClientRoles(args);
+    const roles = this.controller.applyClientRoles
+      ? await this.controller.applyClientRoles(data, fetchedRoles, args)
+      : fetchedRoles;
     const permissions = await this.controller.getPermissions(data, args);
 
+    const defaultApplied = this.defaultApplyPermissions(permissions, roles);
     const appliedPermissions = this.controller.applyPermissions
-      ? await this.controller.applyPermissions(data, permissions, roles, args)
-      : this.defaultApplyPermissions(permissions, roles);
+      ? await this.controller.applyPermissions(data, defaultApplied, roles, args)
+      : defaultApplied;
 
     const actions = this.controller.getActions
       ? await this.controller.getActions(args)
@@ -226,5 +239,6 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
 // Serializable -> This is functionally a container that is used to provide the necessary data to the usePermissions hook to build a View object on the client.
 export interface View<Data, Args, Action, Role> {
   endpoints: ModelAPIRequest<Data, Args>;
+  // derive:  
 }
 
