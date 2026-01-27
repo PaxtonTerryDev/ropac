@@ -1,4 +1,36 @@
-import { UserProfile } from "../types/user";
+import { mergePermissions, PermissionShorthand } from "@/lib/permissions";
+import { Role, UserProfile, UserRole } from "../types/user";
+
+
+export const defaultRolePermissions: Record<Role, PermissionShorthand> = {
+  "admin": "CRUD",
+  "team_lead": "RU",
+  "employee": "R",
+}
+
+export const userRoles: UserRole[] = [
+  { userId: "1", roles: ["admin", "employee"] },
+  { userId: "2", roles: ["team_lead", "employee"] },
+  { userId: "3", roles: ["employee"] },
+  { userId: "4", roles: ["team_lead", "employee"] },
+];
+
+export function getUserRoles(userId: string): Role[] {
+  const userRoleAssignment = userRoles.find(ur => ur.userId === userId);
+  if (!userRoleAssignment) throw new Error(`No Roles found for user: ${userId}`)
+  return userRoleAssignment.roles;
+}
+
+export function getDefaultRolePermissions(userId: string) {
+  try {
+    const roles = getUserRoles(userId);
+    const defaultPermissions = roles.map(r => defaultRolePermissions[r]) 
+    const merged = mergePermissions(...defaultPermissions);
+    return merged;
+  } catch {
+    throw new Error("Could not fetch default role permissions");
+  }
+}
 
 export const users: UserProfile[] = [
   {
