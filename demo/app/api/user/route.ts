@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { users } from "../../../data/users"
 import { userModel } from "./model"
 import { ModelInstance } from "@/lib/models";
 
@@ -9,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const controller = new ModelInstance(userModel).createController();
   if (!id) return NextResponse.error();
-  const res = controller.handleRequest({ userId: id })
+  const res = await controller.handleRequest({ userId: id })
   return NextResponse.json({
     model: res,
   })
