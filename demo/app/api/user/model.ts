@@ -6,6 +6,7 @@ import { getDefaultRolePermissions } from '@/utils/get-default-role-permissions'
 
 const userModel: Model<UserProfile, FetchUserProfileArgs, Action, Role> = {
   endpoints: {
+    url: "/api/user",
     get: {},
     patch: {},
   },
