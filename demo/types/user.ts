@@ -28,3 +28,10 @@ export interface FetchUserProfileArgs {
   userId: string;
 }
 
+export type Role = 'admin' | 'team_lead' | 'employee';
+
+export interface UserRole {
+  userId: string;
+  roles: Role[];
+}
+
