@@ -1,24 +1,27 @@
 import { get } from "./model-api-request";
-import { View } from "./models"
+import { ModelResponse, View } from "./models"
 import { useState, useEffect } from 'react'
-interface PermissionsReturn<Data, Args, Action, Role> {
-  data: Data | undefined,
+
+interface PermissionsReturn<Data, Action> {
+  data: ModelResponse<Data, Action> | undefined;
+  isLoading: boolean;
 }
 
 interface UsePermissionsProps<Data, Args, Action, Role> {
-  view: View<Data, Args, Action, Role>,
+  view: View<Data, Args, Action, Role>;
   args?: Args;
 }
 
-export default function usePermissions<Data, Args, Action, Role>({ view, args }: UsePermissionsProps<Data, Args, Action, Role>): Promise<PermissionsReturn<Data, Args, Action, Role>> | PermissionsReturn<Data, Args, Action, Role> {
-  const [data, setData] = useState<Data | undefined>()
+export default function usePermissions<Data, Args, Action, Role>({ view, args }: UsePermissionsProps<Data, Args, Action, Role>): PermissionsReturn<Data, Action> {
+  const [data, setData] = useState<ModelResponse<Data, Action> | undefined>()
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-
-  useEffect(async () => {
-    const d = await request(args);
-    setData(d);
-  }, [data])
+  useEffect(() => {
+    (async () => {
+      const result = await request(args);
+      setData(result);
+    })();
+  }, [args])
 
   async function request(args?: Args) {
     setIsLoading(true);
@@ -48,7 +51,5 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
   }
 
 
-  return (
-    data
-  )
+  return { data, isLoading };
 }

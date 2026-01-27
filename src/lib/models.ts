@@ -1,8 +1,8 @@
-import { PermissionShorthand } from "./permissions.js";
-import { ModelAPIRequest } from "./model-api-request.js";
-import { Permission } from "./permissions.js";
-import { MappedObject } from "./utils/types/mapped-object.js";
-import { objectJoin, objectMap } from "./utils/object-operators.js";
+import { PermissionShorthand } from "./permissions";
+import { ModelAPIRequest } from "./model-api-request";
+import { Permission } from "./permissions";
+import { MappedObject } from "./utils/types/mapped-object";
+import { objectJoin, objectMap } from "./utils/object-operators";
 
 type FieldView = {
   value: any | any[];
@@ -102,7 +102,11 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
   async handleRequest(args?: Args): Promise<ModelResponse<Data, Action>> {
     const data = await this.controller.getData(args);
     const permissions = await this.controller.getPermissions(data, args);
-    return objectJoin(data as object, "data", permissions, "permissions") as ModelResponse<Data, Action>;
+    const actions = this.controller.getActions ? await this.controller.getActions(args) : [];
+    return {
+      data: objectJoin(data as object, "value", permissions, "permissions"),
+      actions,
+    } as ModelResponse<Data, Action>;
   }
 
   sanitize(response: ModelResponse<Data, Action>) {
