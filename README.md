@@ -118,7 +118,7 @@ Roles are a central component of an RBAC system. However, they often differ in c
 
 In `Ropac`, we don't necessarily care about _what_ the role is or how it is structured -> we just need to know what it is, and how it's permissions should be applied to `Model` data. 
 
-The `Role` generic can be anything you want, as long as it's the same type. This allows you to define as many different kinds of role combinations as you want.
+The `Role` generic can be anything you want, as long as it's the same type for a model. This allows you to define as many different kinds of role combinations as you want. In the future, we could probably add in a general interface to interact with, but for now you're limited to a single `Role` "type".
 
 ```typescript
     enum AppRole {
@@ -133,7 +133,7 @@ The `Role` generic can be anything you want, as long as it's the same type. This
             SALES,
             IT,
             HUMAN_RESOURCES 
-        }
+        } 
 
     interface DepartmentRole {
         department: Department
@@ -142,6 +142,8 @@ The `Role` generic can be anything you want, as long as it's the same type. This
 
     const salesPM = new Role<DepartmentRole>({ department: Department.SALES, role: AppRole.PROJECT_MANAGER });
 ```
+
+You can kind of consider a `Role` to just be a conceptual idea that can have permissions ascribed to it.
 
 A `Role` will have allowed `Permissions` (on a per-field basis) and `Actions` (on a per-model basis).  
 - Permissions: What kind of access (CRUD) the role has to a particular field. Can it
@@ -153,6 +155,8 @@ A `Role` will have allowed `Permissions` (on a per-field basis) and `Actions` (o
 
 A large part of `Ropac`'s toolkit is providing tools to easily design and reason about access on a per-role basis.
 
+You'll find that in most cases, you only really care about the 'read' and 'update' permissions - 'create' and 'delete' often fall more under the domain of an 'Action'.
+
 ### Access
 
 In RBAC systems, there are two approaches to defining access - 
@@ -161,7 +165,7 @@ In RBAC systems, there are two approaches to defining access -
 
 When designing your application's access strategy, we generally recommend the following -
 - Permissions (access to data): In a large majority of cases, you will find that permissions are generally the same for most data. For this purpose, **we generally suggest that permissions should be _permissive_**.
-This means providing a set of access defaults, then removing / adding them on a case by case basis. An example would be an admin being able to have all "CRUD" actions enabled by default.
+This means providing a set of access defaults, then removing / adding them on a case by case basis. An example would be an admin being able to have all "CRUD" actions enabled by default, while a regular user might only need read access.
 
 - Actions: Actions are general purpose, and usually imply state modifications or mutating a different object. For example, "APPROVE_PERMIT" will likely affect several structures and affect modify external state.  **We generally suggest that actions should be _restrictive_**. This is because actions should typically be granted on a case-by-case basis. Using the "APPROVE_PERMIT" example from before, you likely only want to grant this action when the permit has been reviewed.
 
@@ -197,7 +201,7 @@ For this example, we will be defining a component that renders a user profile ca
 
 #### ModelProps
 
-The first thing one should generally do is define your `ModelProps` object that will instantiate the `Model` object.
+The first thing one should generally do is define your `Model` object that will instantiate the `Model` object.
 
 When defining a `ModelProps` object, there are several methods and properties you will need to implement that will be called / used by the `Model`.
 
@@ -215,8 +219,7 @@ These are -
     }
 
     interface UserModelA {
-        userId: string;
-    }
+        userId: string; }
 
     const userModelProps: ModelProps<User, UserModelA> = {
        getData: (args: UserModelA) => {

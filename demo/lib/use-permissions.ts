@@ -1,32 +1,99 @@
-import { get } from "./model-api-request";
+import { get, patch } from "./model-api-request";
 import { ModelResponse, SanitizedFieldViews, View } from "./models"
 import { Permission } from "./permissions";
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
-type FieldAccessor<Data> = {
+export interface FieldLeaf<T = unknown> {
+  value: T | null;
+  permissions: Permission[];
+  canCreate: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  readonly __path__: string;
+}
+
+export type FieldAccessor<Data> = {
   [K in keyof Data]: Data[K] extends object
     ? FieldAccessor<Data[K]>
-    : { value: Data[K] | null; permissions: Permission[]; canRead: boolean; canUpdate: boolean };
+    : FieldLeaf<Data[K]>;
 };
 
-function createFieldAccessor<Data>(fields: SanitizedFieldViews<Data>): FieldAccessor<Data> {
+export type FieldUpdate<T = unknown> = readonly [FieldLeaf<T>, T];
+
+function createFieldAccessor<Data>(
+  fields: SanitizedFieldViews<Data>,
+  parentPath: string = ''
+): FieldAccessor<Data> {
   const accessor = {} as Record<string, unknown>;
 
   for (const [key, field] of Object.entries(fields as Record<string, unknown>)) {
+    const currentPath = parentPath ? `${parentPath}.${key}` : key;
+
     if (field && typeof field === 'object' && 'data' in field && 'permissions' in field) {
       const f = field as { data: unknown; permissions: Permission[] };
       accessor[key] = {
         value: f.data,
         permissions: f.permissions,
+        canCreate: f.permissions.includes('create'),
         canRead: f.permissions.includes('read'),
         canUpdate: f.permissions.includes('update'),
-      };
+        canDelete: f.permissions.includes('delete'),
+        __path__: currentPath,
+      } satisfies FieldLeaf;
     } else if (field && typeof field === 'object') {
-      accessor[key] = createFieldAccessor(field as SanitizedFieldViews<unknown>);
+      accessor[key] = createFieldAccessor(field as SanitizedFieldViews<unknown>, currentPath);
     }
   }
 
   return accessor as FieldAccessor<Data>;
+}
+
+function applyUpdatesToFields<Data>(
+  fields: FieldAccessor<Data>,
+  updates: FieldUpdate[]
+): FieldAccessor<Data> {
+  const newFields = structuredClone(fields);
+
+  for (const [field, newValue] of updates) {
+    const path = field.__path__;
+    const keys = path.split('.');
+    let current: Record<string, unknown> = newFields as Record<string, unknown>;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      current = current[keys[i]] as Record<string, unknown>;
+    }
+
+    const finalKey = keys[keys.length - 1];
+    const target = current[finalKey];
+    if (target && typeof target === 'object' && 'value' in target) {
+      (target as FieldLeaf).value = newValue;
+    }
+  }
+
+  return newFields;
+}
+
+export function buildUpdatePayload<Data>(updates: FieldUpdate[]): Partial<Data> {
+  const result: Record<string, unknown> = {};
+
+  for (const [field, value] of updates) {
+    const path = field.__path__;
+    const keys = path.split('.');
+    let current = result;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!(key in current)) {
+        current[key] = {};
+      }
+      current = current[key] as Record<string, unknown>;
+    }
+
+    current[keys[keys.length - 1]] = value;
+  }
+
+  return result as Partial<Data>;
 }
 
 interface PermissionsReturn<Data, Action> {
@@ -34,6 +101,8 @@ interface PermissionsReturn<Data, Action> {
   fields: FieldAccessor<Data> | undefined;
   actions: Action[];
   isLoading: boolean;
+  update: <T>(...updates: FieldUpdate<T>[]) => void;
+  flush: () => Promise<void>;
 }
 
 interface UsePermissionsProps<Data, Args, Action, Role> {
@@ -46,8 +115,11 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
   const [fields, setFields] = useState<FieldAccessor<Data> | undefined>()
   const [actions, setActions] = useState<Action[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const pendingUpdates = useRef<FieldUpdate[]>([]);
 
   const argsKey = JSON.stringify(args);
+  const optimistic = view.config?.optimisticUpdates !== false;
+  const enforcePermissions = view.config?.enforceClientPermissions === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -92,5 +164,75 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
     };
   }, [argsKey]);
 
-  return { response, fields, actions, isLoading };
+  const update = useCallback(<T,>(...updates: FieldUpdate<T>[]) => {
+    if (enforcePermissions) {
+      for (const [field] of updates) {
+        if (!field.canUpdate) {
+          console.warn(`Update blocked: no update permission for ${field.__path__}`);
+          return;
+        }
+      }
+    }
+
+    if (optimistic) {
+      setFields(currentFields => {
+        if (!currentFields) return currentFields;
+        return applyUpdatesToFields(currentFields, updates);
+      });
+    }
+
+    for (const u of updates) {
+      const existingIdx = pendingUpdates.current.findIndex(
+        ([f]) => f.__path__ === u[0].__path__
+      );
+      if (existingIdx >= 0) {
+        pendingUpdates.current[existingIdx] = u;
+      } else {
+        pendingUpdates.current.push(u);
+      }
+    }
+  }, [optimistic, enforcePermissions]);
+
+  const flush = useCallback(async () => {
+    if (pendingUpdates.current.length === 0) return;
+
+    const previousFields = fields;
+    const payload = buildUpdatePayload<Data>(pendingUpdates.current);
+    pendingUpdates.current = [];
+
+    const baseUrl = view.endpoints.patch?.url ?? view.endpoints.url;
+    if (!baseUrl) {
+      throw new Error("No URL defined in view endpoints for PATCH");
+    }
+
+    const params = new URLSearchParams();
+    if (args) {
+      for (const [key, value] of Object.entries(args)) {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      }
+    }
+
+    const queryString = params.toString();
+    const url = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+
+    try {
+      const result = await patch<Data, Action>(url, payload, view.endpoints.headers);
+      if (result) {
+        setResponse(result);
+        if (result.data) {
+          setFields(createFieldAccessor(result.data));
+        }
+        setActions(result.actions ?? []);
+      }
+    } catch (error) {
+      if (previousFields) {
+        setFields(previousFields);
+      }
+      throw error;
+    }
+  }, [view.endpoints, args, fields]);
+
+  return { response, fields, actions, isLoading, update, flush };
 }

@@ -21,7 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { View } from "@/lib/models"
-import usePermissions from "@/lib/use-permissions"
+import usePermissions, { FieldLeaf } from "@/lib/use-permissions"
 import { Action } from "@/types/action"
 import { FetchUserProfileArgs, Role, UserProfile } from "@/types/user"
 import { useState } from "react"
@@ -41,12 +41,13 @@ interface UserProfileCardProps {
 
 interface FieldDisplayProps {
   label: string;
-  field: { value: unknown; canRead: boolean; canUpdate: boolean } | undefined;
+  field: FieldLeaf | undefined;
   editMode: boolean;
   type?: string;
+  onUpdate?: (field: FieldLeaf, value: unknown) => void;
 }
 
-function FieldDisplay({ label, field, editMode, type = "text" }: FieldDisplayProps) {
+function FieldDisplay({ label, field, editMode, type = "text", onUpdate }: FieldDisplayProps) {
   if (!field) {
     return (
       <div className="grid gap-2">
@@ -57,15 +58,20 @@ function FieldDisplay({ label, field, editMode, type = "text" }: FieldDisplayPro
   }
 
   if (!field.canRead) {
+    return null;
+  }
+
+  if (!editMode) {
     return (
       <div className="grid gap-2">
-        <Label className="text-muted-foreground">{label}</Label>
-        <span className="text-sm text-muted-foreground italic">No read permission</span>
+        <Label>
+          {label}
+          {field.canUpdate && <Badge variant="outline" className="ml-2 text-xs">editable</Badge>}
+        </Label>
+        <span className="text-sm py-2">{String(field.value ?? '')}</span>
       </div>
     );
   }
-
-  const isReadOnly = !editMode || !field.canUpdate;
 
   return (
     <div className="grid gap-2">
@@ -76,8 +82,8 @@ function FieldDisplay({ label, field, editMode, type = "text" }: FieldDisplayPro
       <Input
         type={type}
         value={String(field.value ?? '')}
-        onChange={() => {}}
-        readOnly={isReadOnly}
+        onChange={(e) => onUpdate?.(field, e.target.value)}
+        readOnly={!field.canUpdate}
       />
     </div>
   );
@@ -87,10 +93,19 @@ export function UserProfileCard({ view, userId }: UserProfileCardProps) {
   const [editMode, setEditMode] = useState<boolean>(false);
   const [viewerId, setViewerId] = useState<string>('1');
 
-  const { fields, actions, isLoading } = usePermissions<UserProfile, FetchUserProfileArgs, Action, Role>({
+  const { fields, actions, isLoading, update, flush } = usePermissions<UserProfile, FetchUserProfileArgs, Action, Role>({
     view,
     args: { userId, viewerId }
   });
+
+  const handleFieldUpdate = (field: FieldLeaf, value: unknown) => {
+    update([field, value]);
+  };
+
+  async function handleSave() {
+    await flush();
+    setEditMode(false);
+  }
 
   const currentViewer = VIEWERS.find(v => v.id === viewerId);
   const hasEditAction = actions.some(a => a.name === 'EDIT_USER');
@@ -174,38 +189,38 @@ export function UserProfileCard({ view, userId }: UserProfileCardProps) {
               <div>
                 <h3 className="text-lg font-semibold mb-3">Basic Info</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <FieldDisplay label="ID" field={fields.id} editMode={editMode} />
-                  <FieldDisplay label="Name" field={fields.name} editMode={editMode} />
-                  <FieldDisplay label="Email" field={fields.email} editMode={editMode} type="email" />
+                  <FieldDisplay label="ID" field={fields.id} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Name" field={fields.name} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Email" field={fields.email} editMode={editMode} type="email" onUpdate={handleFieldUpdate} />
                 </div>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold mb-3">Address</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <FieldDisplay label="Street" field={fields.address?.street} editMode={editMode} />
-                  <FieldDisplay label="City" field={fields.address?.city} editMode={editMode} />
-                  <FieldDisplay label="Country" field={fields.address?.country} editMode={editMode} />
-                  <FieldDisplay label="Latitude" field={fields.address?.coordinates?.lat} editMode={editMode} />
-                  <FieldDisplay label="Longitude" field={fields.address?.coordinates?.lng} editMode={editMode} />
+                  <FieldDisplay label="Street" field={fields.address?.street} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="City" field={fields.address?.city} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Country" field={fields.address?.country} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Latitude" field={fields.address?.coordinates?.lat} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Longitude" field={fields.address?.coordinates?.lng} editMode={editMode} onUpdate={handleFieldUpdate} />
                 </div>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold mb-3">Preferences</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <FieldDisplay label="Theme" field={fields.preferences?.theme} editMode={editMode} />
-                  <FieldDisplay label="Email Notifications" field={fields.preferences?.notifications?.email} editMode={editMode} />
-                  <FieldDisplay label="SMS Notifications" field={fields.preferences?.notifications?.sms} editMode={editMode} />
-                  <FieldDisplay label="Push Enabled" field={fields.preferences?.notifications?.push?.enabled} editMode={editMode} />
-                  <FieldDisplay label="Push Frequency" field={fields.preferences?.notifications?.push?.frequency} editMode={editMode} />
+                  <FieldDisplay label="Theme" field={fields.preferences?.theme} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Email Notifications" field={fields.preferences?.notifications?.email} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="SMS Notifications" field={fields.preferences?.notifications?.sms} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Push Enabled" field={fields.preferences?.notifications?.push?.enabled} editMode={editMode} onUpdate={handleFieldUpdate} />
+                  <FieldDisplay label="Push Frequency" field={fields.preferences?.notifications?.push?.frequency} editMode={editMode} onUpdate={handleFieldUpdate} />
                 </div>
               </div>
             </div>
           </CardContent>
           <CardFooter>
             {editMode && (
-              <Button type="button" className="w-full" onClick={toggleEditMode}>
+              <Button type="button" className="w-full" onClick={handleSave}>
                 Save
               </Button>
             )}

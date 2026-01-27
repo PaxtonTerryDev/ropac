@@ -77,7 +77,7 @@ export interface ModelComposite<Data, Action> {
 }
 
 export interface SanitizedField {
-  data: any | any[];
+  data: unknown | unknown[];
   permissions: Permission[];
 }
 
@@ -89,23 +89,26 @@ export interface ModelResponse<Data, Action> {
   actions: Action[]
 }
 
-// Provide the definitions needed to create both ModelControllers and ModelViews.
-export interface Model<Data, Args, Action, Role, AdditionalArgs = null> extends Controller<Data, Args, Action, Role, AdditionalArgs>, View<Data, Args, Action, Role> { }
 
-export class ModelInstance<Data, Args, Action, Role, AdditionalArgs = null> {
-  model: Model<Data, Args, Action, Role, AdditionalArgs>;
-  constructor(model: Model<Data, Args, Action, Role, AdditionalArgs>) {
+// TODO: We don't need this yet, but we should be able to cache this data in a redis or something.  That way we don't need to do so many db calls.
+
+// Provide the definitions needed to create both ModelControllers and ModelViews.
+export interface Model<Data, Args, Action, Role> extends Controller<Data, Args, Action, Role>, View<Data, Args, Action, Role> { }
+
+export class ModelInstance<Data, Args, Action, Role> {
+  model: Model<Data, Args, Action, Role>;
+  constructor(model: Model<Data, Args, Action, Role>) {
     this.model = model;
   }
 
-  createController(): ControllerInstance<Data, Args, Action, Role, AdditionalArgs> {
-    const { getAdditionalArgs, getClientRoles, getData, getPermissions, applyPermissions, getActions, applyActions } = this.model;
+  createController(): ControllerInstance<Data, Args, Action, Role> {
+    const { getClientRoles, getData, updateData, getPermissions, applyPermissions, getActions, applyActions } = this.model;
     return new ControllerInstance({
       getData,
       getClientRoles,
       getPermissions,
+      updateData,
       ...(applyPermissions && { applyPermissions }),
-      ...(getAdditionalArgs && { getAdditionalArgs }),
       ...(getActions && { getActions }),
       ...(applyActions && { applyActions }),
     });
@@ -118,46 +121,49 @@ export class ModelInstance<Data, Args, Action, Role, AdditionalArgs = null> {
 
 // Used on the server to fetch model data and permissions, and map them together.
 // Responds to requests from a corresponding ModelView through the React hook.
-export interface Controller<Data, Args, Action, Role, AdditionalArgs = null> {
+export interface Controller<Data, Args, Action, Role> {
 
   /** Optionally get additional args for data and permission mapping. */
-  getAdditionalArgs?: (modelArgs?: Args) => Promise<AdditionalArgs> | AdditionalArgs;
+  // getAdditionalArgs?: (modelArgs?: Args) => Promise<AdditionalArgs> | AdditionalArgs;
 
   /** Should fetch the full data model values from storage */
-  getData: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Data> | Data;
+  getData: (modelArgs?: Args) => Promise<Data> | Data;
 
   /** Should fetch an array of all roles the (accessing) client possesses. */
-  getClientRoles: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Role[]> | Role[]
+  getClientRoles: (modelArgs?: Args) => Promise<Role[]> | Role[];
 
-  /**
-   * Optional step to modify client roles before permissions are applied.
-   * Receives the fetched roles and can add, remove, or replace them.
-   */
-  applyClientRoles?: (data: Data, roles: Role[], modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Role[]> | Role[];
+  /** Should upsert data into storage, and return the complete structure */
+  updateData(data: Partial<Data>, args?: Args): Promise<Data> | Data;
 
   /**
   * Should get the relevant permissions for each data field
   * Is provided with the data returned from getData if data is required to accurately describe permissions
   * */
-  getPermissions: (data: Data, modelArgs?: Args, args?: AdditionalArgs[]) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
+  getPermissions: (data: Data, modelArgs?: Args) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
+
+  /**
+   * Optional step to modify client roles before permissions are applied.
+   * Receives the fetched roles and can add, remove, or replace them.
+   */
+  applyClientRoles?: (data: Data, roles: Role[], modelArgs?: Args) => Promise<Role[]> | Role[];
 
   /**
    * Optional step to modify applied permissions after default role-based merging.
    * Receives the already-merged permissions (shorthands) and can override specific fields.
    */
-  applyPermissions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, roles: Role[], modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<AppliedPermissions<Data>> | AppliedPermissions<Data>;
+  applyPermissions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, roles: Role[], modelArgs?: Args) => Promise<AppliedPermissions<Data>> | AppliedPermissions<Data>;
 
   /** Should get all valid actions to be sent to the client */
-  getActions?: (modelArgs?: Args, ...args: AdditionalArgs[]) => Promise<Action[]> | Action[];
+  getActions?: (modelArgs?: Args) => Promise<Action[]> | Action[];
 
   /** Optional step to modify the actions based on the current application state.  Advised to provide an override for getActions -> otherwise, the `actions` argument will be an empty array. */
   applyActions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, actions: Action[]) => Promise<Action[]> | Action[];
 }
 
-export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null> {
-  controller: Controller<Data, Args, Action, Role, AdditionalArgs>;
+export class ControllerInstance<Data, Args, Action, Role> {
+  controller: Controller<Data, Args, Action, Role>;
 
-  constructor(controller: Controller<Data, Args, Action, Role, AdditionalArgs>) {
+  constructor(controller: Controller<Data, Args, Action, Role>) {
     this.controller = controller;
   }
 
@@ -187,11 +193,11 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
   }
 
   async handleRequest(args?: Args): Promise<ModelResponse<Data, Action>> {
-    const additionalArgs = this.controller.getAdditionalArgs
-      ? await this.controller.getAdditionalArgs(args)
-      : null;
-
     const data = await this.controller.getData(args);
+
+    // TODO: I think we can split this up into individual function calls, that way we can call them depending on the state of the object for different request methods
+    // For example -> in the handleUpdate(PATCH) method, we can return the data after the insert, so we don't want to recall the handleRequest method again.  
+    // I don't want to do optional arguments. More like `compiler` passes. 
     const fetchedRoles = await this.controller.getClientRoles(args);
     const roles = this.controller.applyClientRoles
       ? await this.controller.applyClientRoles(data, fetchedRoles, args)
@@ -219,6 +225,69 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
     return this.sanitize(composite);
   }
 
+  async handleUpdate(updateData: Partial<Data>, args?: Args): Promise<ModelResponse<Data, Action>> {
+    const currentData = await this.controller.getData(args);
+
+    const fetchedRoles = await this.controller.getClientRoles(args);
+    const roles = this.controller.applyClientRoles
+      ? await this.controller.applyClientRoles(currentData, fetchedRoles, args)
+      : fetchedRoles;
+    const permissions = await this.controller.getPermissions(currentData, args);
+
+    const defaultApplied = this.defaultApplyPermissions(permissions, roles);
+    const appliedPermissions = this.controller.applyPermissions
+      ? await this.controller.applyPermissions(currentData, defaultApplied, roles, args)
+      : defaultApplied;
+
+    this.validateUpdatePermissions(updateData, appliedPermissions);
+
+    const updatedData = await this.controller.updateData(updateData, args);
+
+    const newPermissions = await this.controller.getPermissions(updatedData, args);
+    const newDefaultApplied = this.defaultApplyPermissions(newPermissions, roles);
+    const newAppliedPermissions = this.controller.applyPermissions
+      ? await this.controller.applyPermissions(updatedData, newDefaultApplied, roles, args)
+      : newDefaultApplied;
+
+    const actions = this.controller.getActions
+      ? await this.controller.getActions(args)
+      : [];
+    const finalActions = this.controller.applyActions
+      ? await this.controller.applyActions(updatedData, newAppliedPermissions, actions)
+      : this.defaultApplyActions(actions);
+
+    const composite = {
+      data: objectJoin(updatedData as object, "value", newAppliedPermissions, "permissions"),
+      actions: finalActions,
+    } as ModelComposite<Data, Action>;
+
+    return this.sanitize(composite);
+  }
+
+  private validateUpdatePermissions(
+    updateData: Partial<Data>,
+    appliedPermissions: AppliedPermissions<Data>,
+    parentPath: string = ''
+  ): void {
+    for (const [key, value] of Object.entries(updateData as object)) {
+      const currentPath = parentPath ? `${parentPath}.${key}` : key;
+      const fieldPerms = (appliedPermissions as Record<string, unknown>)[key];
+
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        this.validateUpdatePermissions(
+          value as Partial<Data>,
+          fieldPerms as AppliedPermissions<Data>,
+          currentPath
+        );
+      } else {
+        const perms = expandPermissions(fieldPerms as Permission[] | PermissionShorthand);
+        if (!perms.includes('update')) {
+          throw new Error(`Permission denied: cannot update field '${currentPath}'`);
+        }
+      }
+    }
+  }
+
   sanitize(response: ModelComposite<Data, Action>): ModelResponse<Data, Action> {
     const { data, actions } = response;
     return {
@@ -236,9 +305,15 @@ export class ControllerInstance<Data, Args, Action, Role, AdditionalArgs = null>
   }
 }
 
+export interface ViewConfig {
+  optimisticUpdates?: boolean;
+  enforceClientPermissions?: boolean;
+}
+
 // Serializable -> This is functionally a container that is used to provide the necessary data to the usePermissions hook to build a View object on the client.
 export interface View<Data, Args, Action, Role> {
   endpoints: ModelAPIRequest<Data, Args>;
-  // derive:  
+  config?: ViewConfig;
+  // derive:
 }
 

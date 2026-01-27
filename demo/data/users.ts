@@ -26,12 +26,43 @@ export function getUserRoles(userId: string): Role[] {
 export function getDefaultRolePermissions(userId: string) {
   try {
     const roles = getUserRoles(userId);
-    const defaultPermissions = roles.map(r => defaultRolePermissions[r]) 
+    const defaultPermissions = roles.map(r => defaultRolePermissions[r])
     const merged = mergeShorthandPermissions(...defaultPermissions);
     return merged;
   } catch {
     throw new Error("Could not fetch default role permissions");
   }
+}
+
+function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const result = { ...target };
+  for (const key of Object.keys(source) as (keyof T)[]) {
+    const sourceValue = source[key];
+    const targetValue = target[key];
+    if (
+      sourceValue !== null &&
+      typeof sourceValue === 'object' &&
+      !Array.isArray(sourceValue) &&
+      targetValue !== null &&
+      typeof targetValue === 'object' &&
+      !Array.isArray(targetValue)
+    ) {
+      result[key] = deepMerge(targetValue as object, sourceValue as object) as T[keyof T];
+    } else if (sourceValue !== undefined) {
+      result[key] = sourceValue as T[keyof T];
+    }
+  }
+  return result;
+}
+
+export function updateUser(userId: string, data: Partial<UserProfile>): UserProfile {
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error(`User not found: ${userId}`);
+  }
+  const updated = deepMerge(users[index], data);
+  users[index] = updated;
+  return updated;
 }
 
 export const users: UserProfile[] = [
