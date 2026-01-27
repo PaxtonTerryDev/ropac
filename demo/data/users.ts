@@ -1,4 +1,4 @@
-import { mergePermissions, PermissionShorthand } from "@/lib/permissions";
+import { mergeShorthandPermissions, PermissionShorthand } from "@/lib/permissions";
 import { Role, UserProfile, UserRole } from "../types/user";
 
 
@@ -25,7 +25,7 @@ export function getDefaultRolePermissions(userId: string) {
   try {
     const roles = getUserRoles(userId);
     const defaultPermissions = roles.map(r => defaultRolePermissions[r]) 
-    const merged = mergePermissions(...defaultPermissions);
+    const merged = mergeShorthandPermissions(...defaultPermissions);
     return merged;
   } catch {
     throw new Error("Could not fetch default role permissions");
