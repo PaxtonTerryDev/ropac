@@ -2,7 +2,6 @@ import { expandPermissions, mergeShorthandPermissions, Permission, PermissionSho
 import { ModelAPIRequest } from "./model-api-request";
 import { MappedObject } from "@/lib/utils/types/mapped-object";
 import { objectJoin, objectMap } from "./utils/object-operators";
-import { log } from "@paxtonterrydev/quicklog";
 
 function permissionsToShorthand(permissions: Permission[]): PermissionShorthand {
   const map: Record<Permission, string> = { create: "C", read: "R", update: "U", delete: "D" };
@@ -167,62 +166,87 @@ export class ControllerInstance<Data, Args, Action, Role> {
     this.controller = controller;
   }
 
-  private defaultApplyPermissions(
-    permissions: FieldPermissions<Data, Role>,
-    roles: Role[]
-  ): AppliedPermissions<Data> {
-    return objectMap(permissions as object, (_key: string, value: unknown) => {
-      const rolePermMap = value as RolePermissionsMap<Role>;
-      const shorthands: PermissionShorthand[] = [];
-      for (const role of roles) {
-        const perms = rolePermMap.get(role);
-        if (perms) {
-          if (Array.isArray(perms)) {
-            shorthands.push(permissionsToShorthand(perms));
-          } else {
-            shorthands.push(perms);
+  private methodDefaults = {
+    applyPermissions: (
+      permissions: FieldPermissions<Data, Role>,
+      roles: Role[]
+    ): AppliedPermissions<Data> => {
+      return objectMap(permissions as object, (_key: string, value: unknown) => {
+        const rolePermMap = value as RolePermissionsMap<Role>;
+        const shorthands: PermissionShorthand[] = [];
+        for (const role of roles) {
+          const perms = rolePermMap.get(role);
+          if (perms) {
+            if (Array.isArray(perms)) {
+              shorthands.push(permissionsToShorthand(perms));
+            } else {
+              shorthands.push(perms);
+            }
           }
         }
-      }
-      return mergeShorthandPermissions(...shorthands);
-    }) as AppliedPermissions<Data>;
-  }
-
-  private defaultApplyActions(actions: Action[]): Action[] {
-    return actions;
+        return mergeShorthandPermissions(...shorthands);
+      }) as AppliedPermissions<Data>;
+    },
+    applyActions: (actions: Action[]): Action[] => {
+      return actions;
+    }
   }
 
   async handleRequest(args?: Args): Promise<ModelResponse<Data, Action>> {
     const data = await this.controller.getData(args);
 
-    // TODO: I think we can split this up into individual function calls, that way we can call them depending on the state of the object for different request methods
-    // For example -> in the handleUpdate(PATCH) method, we can return the data after the insert, so we don't want to recall the handleRequest method again.  
-    // I don't want to do optional arguments. More like `compiler` passes. 
+    const roles = await this.handleRoles(data, args);
+    const appliedPermissions = await this.handlePermissions(data, roles, args);
+    const appliedActions = await this.handleActions(data, appliedPermissions, args);
+    const composite = this.createModelComposite(data, appliedPermissions, appliedActions)
+    const response = this.createResponse(composite);
+    
+    return response;
+  }
+
+  private async handleRoles(data: Data, args?: Args): Promise<Role[]> {
     const fetchedRoles = await this.controller.getClientRoles(args);
     const roles = this.controller.applyClientRoles
       ? await this.controller.applyClientRoles(data, fetchedRoles, args)
       : fetchedRoles;
-    const permissions = await this.controller.getPermissions(data, args);
 
-    const defaultApplied = this.defaultApplyPermissions(permissions, roles);
+    return roles;
+  }
+
+  private async handlePermissions(data: Data, roles: Role[], args?: Args): Promise<AppliedPermissions<Data>> {
+    const permissions = await this.controller.getPermissions(data, args);
+    const defaultApplied = this.methodDefaults.applyPermissions(permissions, roles);
     const appliedPermissions = this.controller.applyPermissions
       ? await this.controller.applyPermissions(data, defaultApplied, roles, args)
       : defaultApplied;
 
+    return appliedPermissions;
+  }
+
+  private async handleActions(data: Data, appliedPermissions: AppliedPermissions<Data>, args?: Args) {
     const actions = this.controller.getActions
       ? await this.controller.getActions(args)
       : [];
 
-    const finalActions = this.controller.applyActions
+    const appliedActions = this.controller.applyActions
       ? await this.controller.applyActions(data, appliedPermissions, actions)
-      : this.defaultApplyActions(actions);
+      : this.methodDefaults.applyActions(actions);
 
+    return appliedActions;
+  }
+
+  private createModelComposite(data: Data, appliedPermissions: AppliedPermissions<Data>, appliedActions: Action[]): ModelComposite<Data, Action> {
+    // WARN: We are casting this -> need to refactor objectJoin to properly type output.
     const composite = {
       data: objectJoin(data as object, "value", appliedPermissions, "permissions"),
-      actions: finalActions,
+      actions: appliedActions,
     } as ModelComposite<Data, Action>;
 
-    return this.sanitize(composite);
+    return composite;
+  }
+
+  private createResponse(composite: ModelComposite<Data, Action>): ModelResponse<Data, Action> {
+    return this.sanitize(composite)
   }
 
   async handleUpdate(updateData: Partial<Data>, args?: Args): Promise<ModelResponse<Data, Action>> {
