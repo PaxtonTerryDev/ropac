@@ -6,6 +6,7 @@ export type DerivedStateVariableDefinition = [string, DeriveEvaluationJoin | Der
 
 type Comparator = "equals" | "less" | "greater" | "lessEqual" | "greaterEqual";
 
+// TODO: WOULD LIKE TO MAKE THIS GENERIC SO WE CAN EXPLICITLY DEFINE ACCESSOR PATHS
 type DeriveCondition = [string, Comparator, Primitive]
 
 interface DeriveEvaluationJoin {
