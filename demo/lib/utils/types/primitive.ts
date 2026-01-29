@@ -1,26 +1,25 @@
+import { Recursive } from "./recursive";
+
 /** Property that can be reliably serialized */
 export type Primitive = string | number | boolean | null;
 
 export type PrimitiveArray = Primitive[];
 
+/** Primitive array which all values are of the same Primitive type */
 export type StrictPrimitiveArray<T extends Primitive> = T[];
 
-/** Property composed of either a single Primitive value, or array of Primitive values */
-export type SerializableProp = Primitive | Primitive[];
+/** Property of either a Primitive, or an array of Primitives */
+export type SerializableProperty = Primitive | PrimitiveArray[];
 
-/** Object in which all keys are of a SerializableProp type */
-export type SerializableObject<T> = { [K in keyof T]: SerializableProp };
+/** Object in which every key is a Serializable property */
+type Serializable<T> = Recursive<Required<T>, SerializableProperty>
 
-/** Recursive object that ends in a flat object with fully serializable properties */
-export type Serializable<T> = {
-  [K in keyof T]: T[K] extends SerializableProp 
-    ? SerializableProp 
-    : Serializable<T>
-}
+/** when provided with an object, and an array of possibly undefined object paths, sets those properties to null */
+function enforceSerialization() {}
 
 interface Name {
   first: string;
-  middle?: string;
+  middle?: string | null;
   last: string;
 }
 
