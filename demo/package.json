@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:sb": "tsx --watch sandbox.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
