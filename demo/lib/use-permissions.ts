@@ -1,7 +1,13 @@
 import { get, patch } from "./model-api-request";
-import { ModelResponse, SanitizedFieldViews, View } from "./models"
+import {
+  ModelResponse,
+  SanitizedField,
+  SanitizedFieldViews,
+  View,
+} from "./models";
 import { Permission } from "./permissions";
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { makeStructureAccessible } from "./utils/types/field-accessor";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface FieldLeaf<T = unknown> {
   value: T | null;
@@ -21,43 +27,47 @@ export type FieldAccessor<Data> = {
 
 export type FieldUpdate<T = unknown> = readonly [FieldLeaf<T>, T];
 
+function isSanitizedField(value: unknown): value is SanitizedField {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "data" in value &&
+    "permissions" in value
+  );
+}
+
+function toFieldLeaf(field: SanitizedField): Omit<FieldLeaf, "__path__"> {
+  return {
+    value: field.data,
+    permissions: field.permissions,
+    canCreate: field.permissions.includes("create"),
+    canRead: field.permissions.includes("read"),
+    canUpdate: field.permissions.includes("update"),
+    canDelete: field.permissions.includes("delete"),
+  };
+}
+
 function createFieldAccessor<Data>(
   fields: SanitizedFieldViews<Data>,
-  parentPath: string = ''
+  parentPath: string = "",
 ): FieldAccessor<Data> {
-  const accessor = {} as Record<string, unknown>;
-
-  for (const [key, field] of Object.entries(fields as Record<string, unknown>)) {
-    const currentPath = parentPath ? `${parentPath}.${key}` : key;
-
-    if (field && typeof field === 'object' && 'data' in field && 'permissions' in field) {
-      const f = field as { data: unknown; permissions: Permission[] };
-      accessor[key] = {
-        value: f.data,
-        permissions: f.permissions,
-        canCreate: f.permissions.includes('create'),
-        canRead: f.permissions.includes('read'),
-        canUpdate: f.permissions.includes('update'),
-        canDelete: f.permissions.includes('delete'),
-        __path__: currentPath,
-      } satisfies FieldLeaf;
-    } else if (field && typeof field === 'object') {
-      accessor[key] = createFieldAccessor(field as SanitizedFieldViews<unknown>, currentPath);
-    }
-  }
-
-  return accessor as FieldAccessor<Data>;
+  return makeStructureAccessible(
+    fields as object,
+    isSanitizedField,
+    toFieldLeaf,
+    parentPath,
+  ) as unknown as FieldAccessor<Data>;
 }
 
 function applyUpdatesToFields<Data>(
   fields: FieldAccessor<Data>,
-  updates: FieldUpdate[]
+  updates: FieldUpdate[],
 ): FieldAccessor<Data> {
   const newFields = structuredClone(fields);
 
   for (const [field, newValue] of updates) {
     const path = field.__path__;
-    const keys = path.split('.');
+    const keys = path.split(".");
     let current: Record<string, unknown> = newFields as Record<string, unknown>;
 
     for (let i = 0; i < keys.length - 1; i++) {
@@ -66,7 +76,7 @@ function applyUpdatesToFields<Data>(
 
     const finalKey = keys[keys.length - 1];
     const target = current[finalKey];
-    if (target && typeof target === 'object' && 'value' in target) {
+    if (target && typeof target === "object" && "value" in target) {
       (target as FieldLeaf).value = newValue;
     }
   }
@@ -74,12 +84,14 @@ function applyUpdatesToFields<Data>(
   return newFields;
 }
 
-export function buildUpdatePayload<Data>(updates: FieldUpdate[]): Partial<Data> {
+export function buildUpdatePayload<Data>(
+  updates: FieldUpdate[],
+): Partial<Data> {
   const result: Record<string, unknown> = {};
 
   for (const [field, value] of updates) {
     const path = field.__path__;
-    const keys = path.split('.');
+    const keys = path.split(".");
     let current = result;
 
     for (let i = 0; i < keys.length - 1; i++) {
@@ -110,10 +122,18 @@ interface UsePermissionsProps<Data, Args, Action, Role> {
   args?: Args;
 }
 
-export default function usePermissions<Data, Args, Action, Role>({ view, args }: UsePermissionsProps<Data, Args, Action, Role>): PermissionsReturn<Data, Action> {
-  const [response, setResponse] = useState<ModelResponse<Data, Action> | undefined>()
-  const [fields, setFields] = useState<FieldAccessor<Data> | undefined>()
-  const [actions, setActions] = useState<Action[]>([])
+export default function usePermissions<Data, Args, Action, Role>({
+  view,
+  args,
+}: UsePermissionsProps<Data, Args, Action, Role>): PermissionsReturn<
+  Data,
+  Action
+> {
+  const [response, setResponse] = useState<
+    ModelResponse<Data, Action> | undefined
+  >();
+  const [fields, setFields] = useState<FieldAccessor<Data> | undefined>();
+  const [actions, setActions] = useState<Action[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const pendingUpdates = useRef<FieldUpdate[]>([]);
 
@@ -164,36 +184,41 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
     };
   }, [argsKey]);
 
-  const update = useCallback(<T,>(...updates: FieldUpdate<T>[]) => {
-    if (enforcePermissions) {
-      for (const [field] of updates) {
-        if (!field.canUpdate) {
-          console.warn(`Update blocked: no update permission for ${field.__path__}`);
-          return;
+  const update = useCallback(
+    <T>(...updates: FieldUpdate<T>[]) => {
+      if (enforcePermissions) {
+        for (const [field] of updates) {
+          if (!field.canUpdate) {
+            console.warn(
+              `Update blocked: no update permission for ${field.__path__}`,
+            );
+            return;
+          }
         }
       }
-    }
 
-    if (optimistic) {
-      setFields(currentFields => {
-        if (!currentFields) return currentFields;
-        return applyUpdatesToFields(currentFields, updates);
-      });
-    }
-
-    for (const u of updates) {
-      const existingIdx = pendingUpdates.current.findIndex(
-        ([f]) => f.__path__ === u[0].__path__
-      );
-      if (existingIdx >= 0) {
-        pendingUpdates.current[existingIdx] = u;
-      } else {
-        pendingUpdates.current.push(u);
+      if (optimistic) {
+        setFields((currentFields) => {
+          if (!currentFields) return currentFields;
+          return applyUpdatesToFields(currentFields, updates);
+        });
       }
-    }
-  }, [optimistic, enforcePermissions]);
 
-  const flush = useCallback(async () => {
+      for (const u of updates) {
+        const existingIdx = pendingUpdates.current.findIndex(
+          ([f]) => f.__path__ === u[0].__path__,
+        );
+        if (existingIdx >= 0) {
+          pendingUpdates.current[existingIdx] = u;
+        } else {
+          pendingUpdates.current.push(u);
+        }
+      }
+    },
+    [optimistic, enforcePermissions],
+  );
+
+  const push = useCallback(async () => {
     if (pendingUpdates.current.length === 0) return;
 
     const previousFields = fields;
@@ -218,7 +243,11 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
     const url = queryString ? `${baseUrl}?${queryString}` : baseUrl;
 
     try {
-      const result = await patch<Data, Action>(url, payload, view.endpoints.headers);
+      const result = await patch<Data, Action>(
+        url,
+        payload,
+        view.endpoints.headers,
+      );
       if (result) {
         setResponse(result);
         if (result.data) {
@@ -234,5 +263,5 @@ export default function usePermissions<Data, Args, Action, Role>({ view, args }:
     }
   }, [view.endpoints, args, fields]);
 
-  return { response, fields, actions, isLoading, update, flush };
+  return { response, fields, actions, isLoading, update, flush: push };
 }

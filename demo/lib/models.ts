@@ -1,58 +1,88 @@
-import { expandPermissions, mergeShorthandPermissions, Permission, PermissionShorthand } from "./permissions";
+import {
+  expandPermissions,
+  mergeShorthandPermissions,
+  Permission,
+  PermissionShorthand,
+} from "./permissions";
 import { ModelAPIRequest } from "./model-api-request";
 import { MappedObject } from "@/lib/utils/types/mapped-object";
 import { objectJoin, objectMap } from "./utils/object-operators";
+import { SerializableProperty } from "./utils/types/primitive";
 
-function permissionsToShorthand(permissions: Permission[]): PermissionShorthand {
-  const map: Record<Permission, string> = { create: "C", read: "R", update: "U", delete: "D" };
-  return permissions.map(p => map[p]).join("") as PermissionShorthand;
+function permissionsToShorthand(
+  permissions: Permission[],
+): PermissionShorthand {
+  const map: Record<Permission, string> = {
+    create: "C",
+    read: "R",
+    update: "U",
+    delete: "D",
+  };
+  return permissions.map((p) => map[p]).join("") as PermissionShorthand;
 }
 
 type FieldView = {
-  value: any | any[];
+  value: SerializableProperty;
   permissions: Permission[];
-}
+};
 
 /** All keys of the provided base T with an associated value */
-export type FieldValues<T> = MappedObject<T, any | any[]>
+export type FieldValues<T> = MappedObject<T, SerializableProperty>;
 
 /** A map of Roles correlated to their respective permissions.  Used mainly in FieldPermissions, to map all the permissions for a particular field. */
-export type RolePermissionsMap<Role> = Map<Role, Permission[] | PermissionShorthand>
+export type RolePermissionsMap<Role> = Map<
+  Role,
+  Permission[] | PermissionShorthand
+>;
 
 /**
  * A tuple type where index 0 is a role and index 1 is either an array of permissions, or a PermissionShorthand definition
  */
-type RolePermissionMapDefinition<Role> = [Role, Permission[] | PermissionShorthand]
+type RolePermissionMapDefinition<Role> = [
+  Role,
+  Permission[] | PermissionShorthand,
+];
 
-/** 
-* Creates a new instance of a RolePermissionMap.  
-* @param rolePermissions RolePermissionMapDefinition objects
-*
-* @example
-* const permissionMap = newRolePermissionMap([adminRole, "CRUD"], [userRole, "R"])
-* */
-export function newRolePermissionsMap<Role>(...rolePermissions: RolePermissionMapDefinition<Role>[]): RolePermissionsMap<Role> {
-  return new Map([...rolePermissions])
+/**
+ * Creates a new instance of a RolePermissionMap.
+ * @param rolePermissions RolePermissionMapDefinition objects
+ *
+ * @example
+ * const permissionMap = newRolePermissionMap([adminRole, "CRUD"], [userRole, "R"])
+ * */
+export function newRolePermissionsMap<Role>(
+  ...rolePermissions: RolePermissionMapDefinition<Role>[]
+): RolePermissionsMap<Role> {
+  return new Map([...rolePermissions]);
 }
 
 /**
  * Applies a single RolePermissionMap to each key in the provided data object.
  */
-export function applySingleRolePermissionsMap<BaseObj extends object, Role>(data: BaseObj, permissionMap: RolePermissionsMap<Role>): FieldPermissions<BaseObj, Role> {
+export function applySingleRolePermissionsMap<BaseObj extends object, Role>(
+  data: BaseObj,
+  permissionMap: RolePermissionsMap<Role>,
+): FieldPermissions<BaseObj, Role> {
   return objectMap(data, (_key, _value) => permissionMap);
 }
 
 /** All keys of the provided base T with an associated RolePermissionMap */
-export type FieldPermissions<BaseObj, Role> = MappedObject<BaseObj, RolePermissionsMap<Role>>
+export type FieldPermissions<BaseObj, Role> = MappedObject<
+  BaseObj,
+  RolePermissionsMap<Role>
+>;
 
-export type AppliedPermissions<BaseObj> = MappedObject<BaseObj, Permission[] | PermissionShorthand>
+export type AppliedPermissions<BaseObj> = MappedObject<
+  BaseObj,
+  Permission[] | PermissionShorthand
+>;
 
 export function updatePermissionField<T extends object>(
   permissions: T,
   path: string,
-  value: Permission[] | PermissionShorthand
+  value: Permission[] | PermissionShorthand,
 ): void {
-  const keys = path.split('.');
+  const keys = path.split(".");
   let current: Record<string, unknown> = permissions as Record<string, unknown>;
 
   for (let i = 0; i < keys.length - 1; i++) {
@@ -65,14 +95,16 @@ export function updatePermissionField<T extends object>(
 export function updateRolePermission<R extends string>(
   rolePermissions: Record<R, Permission[] | PermissionShorthand>,
   role: R,
-  value: Permission[] | PermissionShorthand
+  value: Permission[] | PermissionShorthand,
 ): void {
   rolePermissions[role] = value;
 }
-/** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */ type FieldViews<T> = MappedObject<T, FieldView>;
+/** All keys of the provided Base T with an associated FieldView object. Is the `data` property of the ModelResponse object */ type FieldViews<
+  T,
+> = MappedObject<T, FieldView>;
 export interface ModelComposite<Data, Action> {
-  data: FieldViews<Data>,
-  actions: Action[]
+  data: FieldViews<Data>;
+  actions: Action[];
 }
 
 export interface SanitizedField {
@@ -81,18 +113,20 @@ export interface SanitizedField {
 }
 
 /** The cleaned ModelComposite object that contains only relevant field values and permissions */
-export type SanitizedFieldViews<Data> = MappedObject<Data, SanitizedField>
+export type SanitizedFieldViews<Data> = MappedObject<Data, SanitizedField>;
 
 export interface ModelResponse<Data, Action> {
-  data: SanitizedFieldViews<Data>,
-  actions: Action[]
+  data: SanitizedFieldViews<Data>;
+  actions: Action[];
 }
-
 
 // TODO: We don't need this yet, but we should be able to cache this data in a redis or something.  That way we don't need to do so many db calls.
 
 // Provide the definitions needed to create both ModelControllers and ModelViews.
-export interface Model<Data, Args, Action, Role> extends Controller<Data, Args, Action, Role>, View<Data, Args, Action, Role> { }
+export interface Model<Data, Args, Action, Role>
+  extends
+    Controller<Data, Args, Action, Role>,
+    View<Data, Args, Action, Role> {}
 
 export class ModelInstance<Data, Args, Action, Role> {
   model: Model<Data, Args, Action, Role>;
@@ -101,7 +135,15 @@ export class ModelInstance<Data, Args, Action, Role> {
   }
 
   createController(): ControllerInstance<Data, Args, Action, Role> {
-    const { getClientRoles, getData, updateData, getPermissions, applyPermissions, getActions, applyActions } = this.model;
+    const {
+      getClientRoles,
+      getData,
+      updateData,
+      getPermissions,
+      applyPermissions,
+      getActions,
+      applyActions,
+    } = this.model;
     return new ControllerInstance({
       getData,
       getClientRoles,
@@ -121,7 +163,6 @@ export class ModelInstance<Data, Args, Action, Role> {
 // Used on the server to fetch model data and permissions, and map them together.
 // Responds to requests from a corresponding ModelView through the React hook.
 export interface Controller<Data, Args, Action, Role> {
-
   /** Optionally get additional args for data and permission mapping. */
   // getAdditionalArgs?: (modelArgs?: Args) => Promise<AdditionalArgs> | AdditionalArgs;
 
@@ -135,28 +176,44 @@ export interface Controller<Data, Args, Action, Role> {
   updateData(data: Partial<Data>, args?: Args): Promise<Data> | Data;
 
   /**
-  * Should get the relevant permissions for each data field
-  * Is provided with the data returned from getData if data is required to accurately describe permissions
-  * */
-  getPermissions: (data: Data, modelArgs?: Args) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
+   * Should get the relevant permissions for each data field
+   * Is provided with the data returned from getData if data is required to accurately describe permissions
+   * */
+  getPermissions: (
+    data: Data,
+    modelArgs?: Args,
+  ) => Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>;
 
   /**
    * Optional step to modify client roles before permissions are applied.
    * Receives the fetched roles and can add, remove, or replace them.
    */
-  applyClientRoles?: (data: Data, roles: Role[], modelArgs?: Args) => Promise<Role[]> | Role[];
+  applyClientRoles?: (
+    data: Data,
+    roles: Role[],
+    modelArgs?: Args,
+  ) => Promise<Role[]> | Role[];
 
   /**
    * Optional step to modify applied permissions after default role-based merging.
    * Receives the already-merged permissions (shorthands) and can override specific fields.
    */
-  applyPermissions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, roles: Role[], modelArgs?: Args) => Promise<AppliedPermissions<Data>> | AppliedPermissions<Data>;
+  applyPermissions?: (
+    data: Data,
+    appliedPermissions: AppliedPermissions<Data>,
+    roles: Role[],
+    modelArgs?: Args,
+  ) => Promise<AppliedPermissions<Data>> | AppliedPermissions<Data>;
 
   /** Should get all valid actions to be sent to the client */
   getActions?: (modelArgs?: Args) => Promise<Action[]> | Action[];
 
   /** Optional step to modify the actions based on the current application state.  Advised to provide an override for getActions -> otherwise, the `actions` argument will be an empty array. */
-  applyActions?: (data: Data, appliedPermissions: AppliedPermissions<Data>, actions: Action[]) => Promise<Action[]> | Action[];
+  applyActions?: (
+    data: Data,
+    appliedPermissions: AppliedPermissions<Data>,
+    actions: Action[],
+  ) => Promise<Action[]> | Action[];
 }
 
 export class ControllerInstance<Data, Args, Action, Role> {
@@ -169,36 +226,47 @@ export class ControllerInstance<Data, Args, Action, Role> {
   private methodDefaults = {
     applyPermissions: (
       permissions: FieldPermissions<Data, Role>,
-      roles: Role[]
+      roles: Role[],
     ): AppliedPermissions<Data> => {
-      return objectMap(permissions as object, (_key: string, value: unknown) => {
-        const rolePermMap = value as RolePermissionsMap<Role>;
-        const shorthands: PermissionShorthand[] = [];
-        for (const role of roles) {
-          const perms = rolePermMap.get(role);
-          if (perms) {
-            if (Array.isArray(perms)) {
-              shorthands.push(permissionsToShorthand(perms));
-            } else {
-              shorthands.push(perms);
+      return objectMap(
+        permissions as object,
+        (_key: string, value: unknown) => {
+          const rolePermMap = value as RolePermissionsMap<Role>;
+          const shorthands: PermissionShorthand[] = [];
+          for (const role of roles) {
+            const perms = rolePermMap.get(role);
+            if (perms) {
+              if (Array.isArray(perms)) {
+                shorthands.push(permissionsToShorthand(perms));
+              } else {
+                shorthands.push(perms);
+              }
             }
           }
-        }
-        return mergeShorthandPermissions(...shorthands);
-      }) as AppliedPermissions<Data>;
+          return mergeShorthandPermissions(...shorthands);
+        },
+      ) as AppliedPermissions<Data>;
     },
     applyActions: (actions: Action[]): Action[] => {
       return actions;
-    }
-  }
-  
+    },
+  };
+
   async handleRequest(args?: Args): Promise<ModelResponse<Data, Action>> {
     const data = await this.controller.getData(args);
 
     const roles = await this.handleRoles(data, args);
     const appliedPermissions = await this.handlePermissions(data, roles, args);
-    const appliedActions = await this.handleActions(data, appliedPermissions, args);
-    const composite = this.createModelComposite(data, appliedPermissions, appliedActions)
+    const appliedActions = await this.handleActions(
+      data,
+      appliedPermissions,
+      args,
+    );
+    const composite = this.createModelComposite(
+      data,
+      appliedPermissions,
+      appliedActions,
+    );
     const response = this.createModelResponse(composite);
 
     return response;
@@ -213,17 +281,33 @@ export class ControllerInstance<Data, Args, Action, Role> {
     return roles;
   }
 
-  private async handlePermissions(data: Data, roles: Role[], args?: Args): Promise<AppliedPermissions<Data>> {
+  private async handlePermissions(
+    data: Data,
+    roles: Role[],
+    args?: Args,
+  ): Promise<AppliedPermissions<Data>> {
     const permissions = await this.controller.getPermissions(data, args);
-    const defaultApplied = this.methodDefaults.applyPermissions(permissions, roles);
+    const defaultApplied = this.methodDefaults.applyPermissions(
+      permissions,
+      roles,
+    );
     const appliedPermissions = this.controller.applyPermissions
-      ? await this.controller.applyPermissions(data, defaultApplied, roles, args)
+      ? await this.controller.applyPermissions(
+          data,
+          defaultApplied,
+          roles,
+          args,
+        )
       : defaultApplied;
 
     return appliedPermissions;
   }
 
-  private async handleActions(data: Data, appliedPermissions: AppliedPermissions<Data>, args?: Args) {
+  private async handleActions(
+    data: Data,
+    appliedPermissions: AppliedPermissions<Data>,
+    args?: Args,
+  ) {
     const actions = this.controller.getActions
       ? await this.controller.getActions(args)
       : [];
@@ -235,21 +319,35 @@ export class ControllerInstance<Data, Args, Action, Role> {
     return appliedActions;
   }
 
-  private createModelComposite(data: Data, appliedPermissions: AppliedPermissions<Data>, appliedActions: Action[]): ModelComposite<Data, Action> {
+  private createModelComposite(
+    data: Data,
+    appliedPermissions: AppliedPermissions<Data>,
+    appliedActions: Action[],
+  ): ModelComposite<Data, Action> {
     // WARN: We are casting this -> need to refactor objectJoin to properly type output.
     const composite = {
-      data: objectJoin(data as object, "value", appliedPermissions, "permissions"),
+      data: objectJoin(
+        data as object,
+        "value",
+        appliedPermissions,
+        "permissions",
+      ),
       actions: appliedActions,
     } as ModelComposite<Data, Action>;
 
     return composite;
   }
 
-  private createModelResponse(composite: ModelComposite<Data, Action>): ModelResponse<Data, Action> {
-    return this.sanitize(composite)
+  private createModelResponse(
+    composite: ModelComposite<Data, Action>,
+  ): ModelResponse<Data, Action> {
+    return this.sanitize(composite);
   }
 
-  async handleUpdate(updateData: Partial<Data>, args?: Args): Promise<ModelResponse<Data, Action>> {
+  async handleUpdate(
+    updateData: Partial<Data>,
+    args?: Args,
+  ): Promise<ModelResponse<Data, Action>> {
     const currentData = await this.controller.getData(args);
     const roles = await this.handleRoles(currentData, args);
     const appliedPermissions = await this.handlePermissions(currentData, roles);
@@ -257,9 +355,21 @@ export class ControllerInstance<Data, Args, Action, Role> {
     this.validateUpdatePermissions(updateData, appliedPermissions);
 
     const updatedData = await this.controller.updateData(updateData, args);
-    const updatedPermissions = await this.handlePermissions(updatedData, roles, args);
-    const updatedActions = await this.handleActions(updatedData, updatedPermissions, args);
-    const composite = this.createModelComposite(updatedData, updatedPermissions, updatedActions);
+    const updatedPermissions = await this.handlePermissions(
+      updatedData,
+      roles,
+      args,
+    );
+    const updatedActions = await this.handleActions(
+      updatedData,
+      updatedPermissions,
+      args,
+    );
+    const composite = this.createModelComposite(
+      updatedData,
+      updatedPermissions,
+      updatedActions,
+    );
 
     return this.createModelResponse(composite);
   }
@@ -268,28 +378,38 @@ export class ControllerInstance<Data, Args, Action, Role> {
   private validateUpdatePermissions(
     updateData: Partial<Data>,
     appliedPermissions: AppliedPermissions<Data>,
-    parentPath: string = ''
+    parentPath: string = "",
   ): void {
     for (const [key, value] of Object.entries(updateData as object)) {
       const currentPath = parentPath ? `${parentPath}.${key}` : key;
       const fieldPerms = (appliedPermissions as Record<string, unknown>)[key];
 
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      if (
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+      ) {
         this.validateUpdatePermissions(
           value as Partial<Data>,
           fieldPerms as AppliedPermissions<Data>,
-          currentPath
+          currentPath,
         );
       } else {
-        const perms = expandPermissions(fieldPerms as Permission[] | PermissionShorthand);
-        if (!perms.includes('update')) {
-          throw new Error(`Permission denied: cannot update field '${currentPath}'`);
+        const perms = expandPermissions(
+          fieldPerms as Permission[] | PermissionShorthand,
+        );
+        if (!perms.includes("update")) {
+          throw new Error(
+            `Permission denied: cannot update field '${currentPath}'`,
+          );
         }
       }
     }
   }
 
-  sanitize(response: ModelComposite<Data, Action>): ModelResponse<Data, Action> {
+  sanitize(
+    response: ModelComposite<Data, Action>,
+  ): ModelResponse<Data, Action> {
     const { data, actions } = response;
     return {
       data: objectMap(data as object, (_key: string, objVal: unknown) => {
@@ -298,26 +418,26 @@ export class ControllerInstance<Data, Args, Action, Role> {
         const hasRead = permissions.includes("read");
         return {
           data: hasRead ? fv.value : null,
-          permissions
-        } as SanitizedField
+          permissions,
+        } as SanitizedField;
       }),
-      actions
-    } as ModelResponse<Data, Action>
+      actions,
+    } as ModelResponse<Data, Action>;
   }
 }
 
 export interface ViewConfig {
-  /** 
-  * Should the client update the ui state BEFORE receiving the update result?
-  *
-  * If true, it is recommended to also set `enforceClientPermissions` to true
-  */
+  /**
+   * Should the client update the ui state BEFORE receiving the update result?
+   *
+   * If true, it is recommended to also set `enforceClientPermissions` to true
+   */
   optimisticUpdates?: boolean;
-  /** 
-  * Should the client do a permission check before allowing a client update?
-  *
-  * Note: permission and security checks will always be enforced in the Model's `Controller` on the api.
-  */
+  /**
+   * Should the client do a permission check before allowing a client update?
+   *
+   * Note: permission and security checks will always be enforced in the Model's `Controller` on the api.
+   */
   enforceClientPermissions?: boolean;
 }
 
@@ -327,4 +447,3 @@ export interface View<Data, Args, Action, Role> {
   config?: ViewConfig;
   // derive:
 }
-
