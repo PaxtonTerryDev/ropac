@@ -1,7 +1,7 @@
 {
-  "name": "<project_name>",
+  "name": "ropac",
   "version": "1.0.0",
-  "description": "<project_description>",
+  "description": "Role-based permission and access control library for React",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,24 +23,21 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PaxtonTerryDev/<project_repo_name>.git"
+    "url": "git+https://github.com/PaxtonTerryDev/ropac.git"
   },
   "author": "PaxtonTerryDev",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/PaxtonTerryDev/<project_repo_name>/issues"
+    "url": "https://github.com/PaxtonTerryDev/ropac/issues"
   },
-  "homepage": "https://github.com/PaxtonTerryDev/<project_repo_name>#readme",
+  "homepage": "https://github.com/PaxtonTerryDev/ropac#readme",
   "devDependencies": {
     "@types/node": "^25.0.9",
+    "@types/react": "^19.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
-  "dependencies": {
-    "@paxtonterrydev/quicklog": "^1.0.2",
-    "clsx": "^2.1.1",
-    "dotenv": "^17.2.3",
-    "react": "^19.2.4",
-    "tailwind-merge": "^3.4.0"
+  "peerDependencies": {
+    "react": "^19.0.0"
   }
 }

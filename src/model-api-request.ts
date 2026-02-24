@@ -3,12 +3,15 @@ import { ModelResponse } from "./models.js";
 
 type ValidRequestHeaders = Record<keyof IncomingHttpHeaders, string>;
 
+type DynamicHeaders = ValidRequestHeaders | (() => ValidRequestHeaders | Promise<ValidRequestHeaders>);
+
 interface RequestBody<Data> {
-  body?: keyof Data[];
+  body?: (keyof Data)[];
 }
+
 export interface ModelAPIRequest<Data, Args> {
   url?: string;
-  headers?: ValidRequestHeaders;
+  headers?: DynamicHeaders;
   get: GetRequest<Args>;
   patch: PatchRequest<Data>;
   post?: PostRequest<Data>;
@@ -21,11 +24,11 @@ type RequireUrlIfMissing<HasBaseUrl extends boolean> = HasBaseUrl extends true
   : { url: string };
 
 type APIRequestBase<HasBaseUrl extends boolean = true> = RequireUrlIfMissing<HasBaseUrl> & {
-  headers?: ValidRequestHeaders;
+  headers?: DynamicHeaders;
 };
 
 type GetRequest<Args, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & {
-  params?: keyof Args[];
+  params?: (keyof Args)[];
 };
 
 type PostRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
@@ -36,13 +39,21 @@ type PatchRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasB
 
 type DeleteRequest<Data, HasBaseUrl extends boolean = true> = APIRequestBase<HasBaseUrl> & RequestBody<Data>;
 
+async function resolveHeaders(
+  headers?: DynamicHeaders
+): Promise<ValidRequestHeaders | undefined> {
+  if (typeof headers === "function") return await headers();
+  return headers;
+}
+
 export async function get<Data, Action>(
   url: string,
-  headers?: Partial<ValidRequestHeaders>
+  headers?: DynamicHeaders
 ): Promise<ModelResponse<Data, Action>> {
+  const resolvedHeaders = await resolveHeaders(headers);
   const response = await fetch(url, {
     method: "GET",
-    ...(headers && { headers }),
+    ...(resolvedHeaders && { headers: resolvedHeaders }),
   });
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -54,12 +65,13 @@ export async function get<Data, Action>(
 export async function post<Data, Action>(
   url: string,
   data: Data,
-  headers?: Partial<ValidRequestHeaders>
+  headers?: DynamicHeaders
 ): Promise<ModelResponse<Data, Action>> {
+  const resolvedHeaders = await resolveHeaders(headers);
   const response = await fetch(url, {
     method: "POST",
     body: JSON.stringify({ data }),
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...resolvedHeaders },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -71,12 +83,13 @@ export async function post<Data, Action>(
 export async function patch<Data, Action>(
   url: string,
   data: Partial<Data>,
-  headers?: Partial<ValidRequestHeaders>
+  headers?: DynamicHeaders
 ): Promise<ModelResponse<Data, Action>> {
+  const resolvedHeaders = await resolveHeaders(headers);
   const response = await fetch(url, {
     method: "PATCH",
     body: JSON.stringify({ data }),
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...resolvedHeaders },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -88,12 +101,13 @@ export async function patch<Data, Action>(
 export async function put<Data, Action>(
   url: string,
   data: Data,
-  headers?: Partial<ValidRequestHeaders>
+  headers?: DynamicHeaders
 ): Promise<ModelResponse<Data, Action>> {
+  const resolvedHeaders = await resolveHeaders(headers);
   const response = await fetch(url, {
     method: "PUT",
     body: JSON.stringify({ data }),
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...resolvedHeaders },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -105,12 +119,13 @@ export async function put<Data, Action>(
 export async function del<Data, Action>(
   url: string,
   data: Partial<Data>,
-  headers?: Partial<ValidRequestHeaders>
+  headers?: DynamicHeaders
 ): Promise<ModelResponse<Data, Action>> {
+  const resolvedHeaders = await resolveHeaders(headers);
   const response = await fetch(url, {
     method: "DELETE",
     body: JSON.stringify({ data }),
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...resolvedHeaders },
   });
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);

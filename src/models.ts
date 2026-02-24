@@ -3,11 +3,12 @@ import {
   mergeShorthandPermissions,
   Permission,
   PermissionShorthand,
-} from "./permissions";
-import { ModelAPIRequest } from "./model-api-request";
-import { MappedObject } from "@/lib/utils/types/mapped-object";
-import { objectJoin, objectMap } from "./utils/object-operators";
-import { SerializableProperty } from "./utils/types/primitive";
+} from "./permissions.js";
+import { ModelAPIRequest } from "./model-api-request.js";
+import { MappedObject } from "./utils/types/mapped-object.js";
+import { objectJoin, objectMap } from "./utils/object-operators.js";
+import { SerializableProperty } from "./utils/types/primitive.js";
+import { PermissionDeniedError } from "./errors.js";
 
 function permissionsToShorthand(
   permissions: Permission[],
@@ -128,13 +129,17 @@ export interface Model<Data, Args, Action, Role>
     Controller<Data, Args, Action, Role>,
     View<Data, Args, Action, Role> {}
 
+export interface ControllerConfig {
+  collectAllViolations?: boolean;
+}
+
 export class ModelInstance<Data, Args, Action, Role> {
   model: Model<Data, Args, Action, Role>;
   constructor(model: Model<Data, Args, Action, Role>) {
     this.model = model;
   }
 
-  createController(): ControllerInstance<Data, Args, Action, Role> {
+  createController(config: ControllerConfig = {}): ControllerInstance<Data, Args, Action, Role> {
     const {
       getClientRoles,
       getData,
@@ -152,7 +157,7 @@ export class ModelInstance<Data, Args, Action, Role> {
       ...(applyPermissions && { applyPermissions }),
       ...(getActions && { getActions }),
       ...(applyActions && { applyActions }),
-    });
+    }, config);
   }
 
   createView(): View<Data, Args, Action, Role> {
@@ -218,9 +223,11 @@ export interface Controller<Data, Args, Action, Role> {
 
 export class ControllerInstance<Data, Args, Action, Role> {
   controller: Controller<Data, Args, Action, Role>;
+  config: ControllerConfig;
 
-  constructor(controller: Controller<Data, Args, Action, Role>) {
+  constructor(controller: Controller<Data, Args, Action, Role>, config: ControllerConfig = {}) {
     this.controller = controller;
+    this.config = config;
   }
 
   private methodDefaults = {
@@ -374,35 +381,62 @@ export class ControllerInstance<Data, Args, Action, Role> {
     return this.createModelResponse(composite);
   }
 
-  // TODO: Should update this to queue update errors and return them, rather than throwing immediately.
   private validateUpdatePermissions(
     updateData: Partial<Data>,
     currentData: Data,
     appliedPermissions: AppliedPermissions<Data>,
-    parentPath: string = "",
+  ): void {
+    const collectAll = this.config.collectAllViolations !== false;
+    const violations: string[] = [];
+    this.collectPermissionViolations(updateData, currentData, appliedPermissions, "", violations, collectAll);
+    if (violations.length > 0) {
+      throw new PermissionDeniedError(violations);
+    }
+  }
+
+  private collectPermissionViolations(
+    updateData: Partial<Data>,
+    currentData: Data,
+    appliedPermissions: AppliedPermissions<Data>,
+    parentPath: string,
+    violations: string[],
+    collectAll: boolean,
   ): void {
     for (const [key, newValue] of Object.entries(updateData as object)) {
       const currentPath = parentPath ? `${parentPath}.${key}` : key;
       const currentValue = (currentData as Record<string, unknown>)[key];
       const fieldPerms = (appliedPermissions as Record<string, unknown>)[key];
 
+      if (fieldPerms === undefined) {
+        if (!collectAll) throw new PermissionDeniedError([currentPath]);
+        violations.push(currentPath);
+        continue;
+      }
+
       if (newValue !== null && typeof newValue === "object" && !Array.isArray(newValue)) {
-        this.validateUpdatePermissions(
+        this.collectPermissionViolations(
           newValue,
           currentValue as Data,
           fieldPerms as AppliedPermissions<Data>,
           currentPath,
+          violations,
+          collectAll,
         );
       } else {
         const perms = expandPermissions(
           fieldPerms as Permission[] | PermissionShorthand,
         );
+        let denied = false;
         if (newValue === null && currentValue !== null && currentValue !== undefined) {
-          if (!perms.includes("delete")) throw new Error(`Permission denied: cannot delete '${currentPath}'`);
+          denied = !perms.includes("delete");
         } else if (newValue !== null && (currentValue === null || currentValue === undefined)) {
-          if (!perms.includes("create")) throw new Error(`Permission denied: cannot create '${currentPath}'`);
+          denied = !perms.includes("create");
         } else {
-          if (!perms.includes("update")) throw new Error(`Permission denied: cannot update '${currentPath}'`);
+          denied = !perms.includes("update");
+        }
+        if (denied) {
+          if (!collectAll) throw new PermissionDeniedError([currentPath]);
+          violations.push(currentPath);
         }
       }
     }
