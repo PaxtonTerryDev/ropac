@@ -8,7 +8,7 @@ Ropac is a server / client framework for defining permission based access to dat
 
 ### Limitations
 
-1. `Ropac` is focused solely on facilitating the delivery of data structures securely from a server to a client. As such, it does not provide anything in regards to actually structuring your RBAC system.  
+1. `Ropac` is focused solely on facilitating the delivery of data structures securely from a server to a client. As such, it does not provide anything in regards to actually structuring your RBAC system.
 
 2. Additionally, outside of providing some built in hooks like `usePermissions`, we don't attempt to handle client rendering.  It will be up to the developer to transform the data into their rendered component.
 
@@ -22,9 +22,9 @@ Ropac is a server / client framework for defining permission based access to dat
 
 ### Problems Addressed
 
-The typical workflow for defining any CRUD based system is usually as follows - 
+The typical workflow for defining any CRUD based system is usually as follows -
 
-1. Define your package being delivered by the server to the client. In React applications, this is usually in the form of some component like follows.  
+1. Define your package being delivered by the server to the client. In React applications, this is usually in the form of some component like follows.
 
 2. The client will typically need data sourced from a secure / remote location (like a database) to hydrate the ui.  This is commonly done in a fetch request from the component.
 
@@ -36,7 +36,7 @@ This is pretty straightforward, but quickly becomes more complicated when you ne
 
 As an example, let's take a `UserProfile` component.
 
-Maybe an Admin 
+Maybe an Admin
 - See all information for the user.
 - Can update all the fields
 
@@ -68,47 +68,51 @@ This is difficult to read and reason about.
 - `View`: (client) A structure outlining the value of each `Model` field and it's CRUD permissions.
 - `Controller`: (server) Implemented on the api to control the data delivered to the client.
 
-A instance of the `Model` class is defined by the developer. This outlines the structure of the data, and defines the methods needed to retrieve the data and properly assign permissions.  You provide the data 'structure' through a generic argument.
+A `Model` interface is implemented by the developer as a plain object. This outlines the structure of the data, and defines the methods needed to retrieve the data and properly assign permissions.  You provide the data 'structure' through a generic argument.
 
-The `Model` instance contains methods to create instances of both the `View` and `Controller`.  Since they both are created from the same parent, they are able to communicate intelligently and easily. 
+That object is then wrapped in a `ModelInstance`, which contains methods to create instances of both the `View` and `ControllerInstance`.  Since they both are created from the same parent, they are able to communicate intelligently and easily.
 
-The `View` has methods to request data from the `Controller`. 
+The `ControllerInstance` handles incoming requests asynchronously, and returns a `ModelResponse` object.
 
-The `Controller` handles these incoming requests asynchronously, and returns a `ViewData` object.
-
-The `View` then receives this `ViewData` object, which has all keys of the generic argument provided to the model. Each key in the `ViewData` object has a `ViewDataField` object that has the following properties:
+The client then receives this `ModelResponse` object, which has all keys of the generic argument provided to the model. Via the `usePermissions` hook, each key in `ModelResponse.data` is converted into a `FieldLeaf` object with the following properties:
 
 ```typescript
 {
-    value: any | null // The value of the field fetched from the database
-    permissions: "CRUD" // The access permissions the client has to the field.  Each letter corresponds to a CRUD operation
+    value: T | null;           // The value of the field fetched from the database
+    permissions: Permission[]; // The expanded CRUD permissions the client has to the field
+    canCreate: boolean;
+    canRead: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+    readonly __path__: string; // Dot-notation path used for updates
 }
 ```
 
-Additionally, a `View` object contains an array of `Action` strings that will hold all available actions the client is allowed to take.
+Additionally, a `ModelResponse` object contains an array of `Action` values that will hold all available actions the client is allowed to take.
 
 The `value` can be anything, but we explicitly add `null` for clarity -
 
-- If the user does not have "Read" permission, the `value` will always equal `null`.  If the user **does** have "Read" permission and the `value` is null, you can assert that the actual value from storage is `null`.  Therefore, for a "should I render this field?" type of determination, it is safer to use the `View.canRead(<property path(property.path)>)` method on the view object.
+- If the user does not have "Read" permission, the `value` will always equal `null`.  If the user **does** have "Read" permission and the `value` is null, you can assert that the actual value from storage is `null`.  Therefore, for a "should I render this field?" type of determination, it is safer to use the `fields.fieldName.canRead` boolean on the field accessor returned by the `usePermissions` hook.
 
-For react projects, the `View` class can be provided as an argument to the `usePermissions` hook, which will automatically request data, provides loading states, and facilitate data updates through patch requests to the api. 
+For react projects, the `View` can be provided as an argument to the `usePermissions` hook, which will automatically request data, provides loading states, and facilitate data updates through patch requests to the api.
 
 ### Key Structures
 
-- `Model`: Used to map any generic typescript object to a set of values, permissions and actions. Defines the base `Permission<T>` objects, and creates instances of `Controller` and `View`.
-- `Controller`: Created by a `Model` to facililate data retreival and permission handling
-- `View`: Created by a `Model` instance and delivered to the client on initial hydration.  Contains methods to retreive and populate data.
-- `Permission`: Defines a set of access permissions for a particular role for all fields of `T`.
+- `Model`: Interface implemented by the developer as a plain object. Defines the methods needed to retrieve data and assign permissions. Passed to `ModelInstance` to activate framework behavior.
+- `ModelInstance`: Class that wraps a `Model` object and exposes `createController()` and `createView()`.
+- `ControllerInstance`: Created by `ModelInstance.createController()` to facilitate data retrieval and permission handling on the server.
+- `View`: Created by `ModelInstance.createView()` and delivered to the client on initial hydration.  Contains the endpoint configuration used to retrieve and populate data.
+- `RolePermissionsMap<Role>`: Defines a set of access permissions for a particular role for all fields of `Data`.
 - `Action`: Any generic action that can be delivered / assigned to the model.  Generally, this is for operations that encompass several fields, or operations that may dramatically change the state of the `Model`. An example may be `APPROVE_PERMIT`.
 
 #### Generic Arguments
 
-The generics are assumed to be the following: 
+The generics are assumed to be the following:
 
-- `T`: The interface needed to hydrate your client component
-- `A`: The interface needed for the controller to process the request. 
-- `R`: The structure of your `Roles`
-- `X`: The structure of your `Actions`.
+- `Data`: The interface needed to hydrate your client component
+- `Args`: The interface needed for the controller to process the request.
+- `Action`: The structure of your `Actions`.
+- `Role`: The structure of your `Roles`
 
 ## Permission Paradigms
 
@@ -116,7 +120,7 @@ The generics are assumed to be the following:
 
 Roles are a central component of an RBAC system. However, they often differ in complexity and implementation from project to project.
 
-In `Ropac`, we don't necessarily care about _what_ the role is or how it is structured -> we just need to know what it is, and how it's permissions should be applied to `Model` data. 
+In `Ropac`, we don't necessarily care about _what_ the role is or how it is structured -> we just need to know what it is, and how it's permissions should be applied to `Model` data.
 
 The `Role` generic can be anything you want, as long as it's the same type for a model. This allows you to define as many different kinds of role combinations as you want. In the future, we could probably add in a general interface to interact with, but for now you're limited to a single `Role` "type".
 
@@ -125,27 +129,27 @@ The `Role` generic can be anything you want, as long as it's the same type for a
             ADMIN,
             PROJECT_MANAGER,
             SUPERVISOR,
-            USER 
+            USER
         }
 
     enum Department {
             MARKETING,
             SALES,
             IT,
-            HUMAN_RESOURCES 
-        } 
+            HUMAN_RESOURCES
+        }
 
     interface DepartmentRole {
         department: Department
         role: AppRole;
     }
 
-    const salesPM = new Role<DepartmentRole>({ department: Department.SALES, role: AppRole.PROJECT_MANAGER });
+    const salesPM: DepartmentRole = { department: Department.SALES, role: AppRole.PROJECT_MANAGER };
 ```
 
 You can kind of consider a `Role` to just be a conceptual idea that can have permissions ascribed to it.
 
-A `Role` will have allowed `Permissions` (on a per-field basis) and `Actions` (on a per-model basis).  
+A `Role` will have allowed `Permissions` (on a per-field basis) and `Actions` (on a per-model basis).
 - Permissions: What kind of access (CRUD) the role has to a particular field. Can it
     - Create: create a new instance of the field? (null -> value)
     - Read: view that data in the client? (value)
@@ -159,7 +163,7 @@ You'll find that in most cases, you only really care about the 'read' and 'updat
 
 ### Access
 
-In RBAC systems, there are two approaches to defining access - 
+In RBAC systems, there are two approaches to defining access -
 - **Restrictive**: All access is disabled unless explicitly enabled. (denylist, whitelist)
 - **Permissive**: All access is allowed unless explicitly disabled. (allowlist, blacklist)
 
@@ -174,7 +178,7 @@ This means providing a set of access defaults, then removing / adding them on a 
 For this example, we will be defining a component that renders a user profile card
 
 ```
-// Define the interface for the component
+// Define the interface for the component
     interface UserProfile {
       userId: string;
       firstName: string;
@@ -184,30 +188,32 @@ For this example, we will be defining a component that renders a user profile ca
       address: Address;
       documents: Document[]
     }
-    
+
     interface Address {
       street: string;
       city: string;
       state: string;
     }
-    
+
     // You will also need to define an interface for the arguments that will be used by the controller to fetch / handle the data
-    interface UserProfileA {
+    interface UserProfileArgs {
       userId: string;
     }
 ```
 
 ### Defining the Model
 
-#### ModelProps
+#### Model Interface
 
-The first thing one should generally do is define your `Model` object that will instantiate the `Model` object.
+The first thing one should generally do is define a plain object implementing the `Model` interface.
 
-When defining a `ModelProps` object, there are several methods and properties you will need to implement that will be called / used by the `Model`.
+When implementing a `Model` object, there are several methods and properties you will need to provide that will be called by `ModelInstance`.
 
 These are -
-- `getPermissions(data: T, args?: A): Promise<RolePermissions[]> | RolePermissions[]`: Should return an array of `RolePermissions<R>` objects. These are the default permissions that will be given to a `Role` for every field of the model generic (`T`).  You can read more about setting these in an idiomatic way in [Best Practices](##Best Practices)
-- `getData(args: A): Promise<ModelValues<T>> | ModelValues<T>`: The function responsible for fetching the data for the model's generic argument type.
+- `getData(args?: Args): Promise<Data> | Data`: The function responsible for fetching the data for the model's generic argument type.
+- `getClientRoles(args?: Args): Promise<Role[]> | Role[]`: Should return an array of all roles the accessing client possesses.
+- `updateData(data: Partial<Data>, args?: Args): Promise<Data> | Data`: Should upsert data into storage and return the complete updated structure.
+- `getPermissions(data: Data, args?: Args): Promise<FieldPermissions<Data, Role>> | FieldPermissions<Data, Role>`: Should return a `FieldPermissions<Data, Role>` object. This maps every field of `Data` to a `RolePermissionsMap<Role>`, which defines the CRUD permissions each role has for that field.  You can read more about setting these in an idiomatic way in [Best Practices](##Best Practices)
 ```typescript
     interface User {
         name: {
@@ -218,168 +224,161 @@ These are -
         email: string;
     }
 
-    interface UserModelA {
-        userId: string; }
-
-    const userModelProps: ModelProps<User, UserModelA> = {
-       getData: (args: UserModelA) => {
-            const result = await db.users.select().where({ id: args.userId }); 
-            return result
-       } 
+    interface UserArgs {
+        userId: string;
     }
+
+    const userModel: Model<User, UserArgs, MyAction, MyRole> = {
+       endpoints: { url: "/api/user", get: {}, patch: {} },
+
+       getData: async (args) => {
+            return await db.users.select().where({ id: args?.userId });
+       },
+       getClientRoles: async (args) => {
+            return await auth.getRoles(args?.userId);
+       },
+       updateData: async (data, args) => {
+            return await db.users.update(data).where({ id: args?.userId });
+       },
+       getPermissions: (data, args) => {
+            // return a FieldPermissions<User, MyRole> object
+       }
+    }
+
+    export { userModel }
 ```
-This should return a `ModelValues<T>` object, which is just a type that requires all keys of the provided generic have values (even if the value is `null`!).
 
 #### Overridable Methods
 
-In addition to the above methods, you can provide overrides for the following methods. These methods have default implementations in the `Model` class already, so these are not required.
+In addition to the above methods, you can provide overrides for the following methods. These methods have default implementations in `ModelInstance` already, so these are not required.
 
-- `getActions(args?: A)`
-- `updatePermissions(data: ModelValues, defaultPermissions: ModelPermissions): Promise<ModelPermissions | ModelPermissionMap`: Runs after `getData` and is supplied with the values retrieved by that function.  This is used to update the permissions depending on the data returned from the `getData` call.  Commonly, this is checking the status of the data, and if it's in a particular state, adding / removing permissions.
-**Default: Returns the permission structure from the `getPermissions` method.**
+- `getActions(args?: Args): Promise<Action[]> | Action[]`
+- `applyPermissions(data: Data, appliedPermissions: AppliedPermissions<Data>, roles: Role[], args?: Args)`: Runs after the default role-based permission merging and is supplied with both the data and the already-merged permissions.  This is used to further modify permissions depending on data state.  Commonly, this is checking the status of the data, and if it's in a particular state, adding / removing permissions.
+**Default: Returns the already-merged permission structure.**
 
 TODO: NEED TO UPDATE THIS WITH HOW WE ARE GOING TO MANAGE ROLE PERMISSIONS AND MAPPING.
 ```typescript
     interface ApprovalStatus {
         status: "Approved" | "Denied" | "Pending"
     }
-    
-    interface ApprovalStatusModelA {
+
+    interface ApprovalStatusArgs {
         id: string;
     }
 
-    const approvalStatusModel = ModelProps<ApprovalStatus, ApprovalStatusModelA> = {
-        getData: (args?: ApprovalStatusModelA) => {
-            return await db.approvalStatus.select().where({ id });
-        };
+    const approvalStatusModel: Model<ApprovalStatus, ApprovalStatusArgs, MyAction, MyRole> = {
+        getData: async (args) => {
+            return await db.approvalStatus.select().where({ id: args?.id });
+        },
 
-        updatePermissions: (data: Values<ApprovalStatus>, rolePermissions: RolePermissions[], args?: A) => {
+        applyPermissions: (data, appliedPermissions, roles, args) => {
             switch (data.status) {
                 case "Approved":
-                   rolePermissions 
+                   // modify and return appliedPermissions
             }
-        }
+        },
+        // ... other required methods
     }
 ```
-This should return an instance of `ModelPermissions<T, R>`, which is a type that requires all keys of the provided generic have a `Record<R, Permissions>.` This is an object that maps all available roles for this model with their permissions.
+This should return an instance of `AppliedPermissions<Data>`, which is a type that requires all keys of the provided generic have a `Permission[] | PermissionShorthand`.
 
-
-TODO: NEED TO ENSURE updateActions IS VALID AFTER IMPLEMENTATION
-- `updateActions(data: ModelValues:<T>, permissions: ModelPermissions<T, R>, args?: A): Promise<ModelActions>`: This function should return a `ModelActions` object, which is a container for the available actions that can be taken against the container.
-**Default: Returns an empty `ActionSet`
+TODO: NEED TO ENSURE applyActions IS VALID AFTER IMPLEMENTATION
+- `applyActions(data: Data, appliedPermissions: AppliedPermissions<Data>, actions: Action[]): Promise<Action[]>`: This function should return a filtered or modified array of actions available to the client.
+**Default: Returns the actions array unchanged.**
 
 ### Instantiating the Model
 
-To define a `Model`, create a object that implements the `ModelProps` interface and provide it as an argument to the constructor.
+To create a `ModelInstance`, pass the object implementing the `Model` interface to the constructor.
 ```typescript
-    const props: ModelProps<UserProfile, UserProfileA> = {}
-    <placeholder text block ModelProps definition>
-    const userProfileModel = new Model(props);
-    export { userProfileModel };
+    import { userModel } from '@models/user-profile'
+    import { ModelInstance } from 'ropac'
+
+    const controller = new ModelInstance(userModel).createController();
 ```
 
 This should be done in a server environment.
 
 ### The Controller (api)
 
-Next, in the api route handler previously defined in the `ModelProps` object
+Ensure you have `GET` and `PATCH` request handlers defined at the endpoints specified in your `Model`'s `endpoints` config.
 
-```typescript
-    import { userProfileModel } from '@models/user-profile'
-    const controller = userProfileModel.createController();
-```
-
-Ensure you have `GET` and `PATCH` request handlers defined.  If you defined them at different endpoints, you will probably need to create a new instance of the controller in each file.
-
-In the `GET` handler, call the `handleRequest()` method, providing the argument object of type `A`.
+In the `GET` handler, call the `handleRequest()` method, providing the argument object of type `Args`.
 
 ```typescript
    // Get Handler
-   // GET handlers can't accept a body, so you should pass the data in as a query parameter, then structure the data to match the type A you provided in your Model definition.
-   const response = controller.handleRequest({ ...args });
+   // GET handlers can't accept a body, so you should pass the data in as a query parameter, then structure the data to match the Args type you provided in your Model definition.
+   const controller = new ModelInstance(userModel).createController();
+   const response = await controller.handleRequest({ ...args });
    // Return the response
 ```
 
-In the `PATCH` handler, call the ` handlePatch()` method, passing the body of the request as the argument
+In the `PATCH` handler, call the `handleUpdate()` method, passing the body of the request as the argument
 
 ```typescript
     // PATCH Handler
-    const response = controller.handleUpdate(req.body)
+    const controller = new ModelInstance(userModel).createController();
+    const response = await controller.handleUpdate(req.body)
     // return the response
 ```
 
 ### The View (client)
 
-**Important: The `View` object should be delivered as a property of the client component.  The client component should not call `Model.createView()`, as this would deliver the entire object to the client.**
+**Important: The `View` object should be delivered as a property of the client component.  The client component should not call `ModelInstance.createView()`, as this would deliver the entire object to the client.**
 
 The `View` is provided as an argument to the `usePermissions` hook.
 
 ```
-// We'll pass in a `View` object, which facilitates interaction with the api. 
-interface UserProfileCardProps<UserProfile> {
-  view: View<UserProfile, UserProfileA>
+// We'll pass in a `View` object, which facilitates interaction with the api.
+interface UserProfileCardProps {
+  view: View<UserProfile, UserProfileArgs, MyAction, MyRole>
 }
 
 export function UserProfileCardNew(props: UserProfileCardProps) {
-  // data is the values for UserProfile
-  // derived evaluates the state of data and returns rendering rules like `canEdit`
-  // update is the equivalent of setData, but we call it for individual fields.
+  // fields is the FieldAccessor for UserProfile — each key is a FieldLeaf with value, permissions, and canX booleans
+  // actions is an array of available Action values
+  // update stages one or more field updates locally
+  // flush sends all staged updates to the api via PATCH
   // isLoading is a state variable -> true when making request to api, false when response returned.
 
-  const { data: userProfile, derived, update, isLoading }= usePermissions(props);
-
-  const { canEdit } = derived;
+  const { fields, actions, isLoading, error, update, flush } = usePermissions({ view: props.view });
 
   function updateFirstName(newFirstName: string) {
-    // update can handle multiple fields, we just provide them in a tuple
-    update([userProfile.firstName, newFirstName])
+    // update accepts one or more [FieldLeaf, newValue] tuples
+    update([fields.firstName, newFirstName])
   }
   return (
-    <div> 
-      { isLoading && renderSkeleton() }   
-      {canEdit && <button>Edit</button>}
-      <div>{userProfile.firstName}</div>
-      <div>{userProfile.lastName}</div>
+    <div>
+      { isLoading && renderSkeleton() }
+      {fields.firstName.canUpdate && <button>Edit</button>}
+      <div>{fields.firstName.value}</div>
+      <div>{fields.lastName.value}</div>
     </div>
   )
 }
 ```
- 
+
 The `usePermissions` hook will take care of fetching and repopulating the data.
-
-If you wanted to do this manually, you can just call
-
-```typescript
-    // get the data from the api
-    const data = view.request(props);
-
-    // update the data, and receive a new view model back
-    // this would occur after a value of the model had been updated. 
-    // when calling the `update` method on the `View` object, it does not automatically update state -> this only happens when calling it on the hook.
-    const updatedData = view.update(newData)
-```
 
 ## Best Practices
 
 ### Narrowing Model for your Application
 
-It's likely that your type arguments for `Role` and `Action` are going the be the same. You can re-export the `Model` and `ModelProps` types to avoid including these in every `Model` definition.
+It's likely that your type arguments for `Role` and `Action` are going the be the same. You can re-export the `Model` type to avoid including these in every `Model` definition.
 
 ```typescript
-    import { Model as BaseModel, ModelProps as BaseModelProps } from "ropac";
+    import { Model } from "ropac";
 
    interface MyRole {
         name: string;
         department: string;
-   } 
+   }
 
    interface MyAction {
         name: string;
         callback: () => Promise<void>;
    }
 
-   export ModelProps<T, A> extends Model<T, A, MyRole, MyAction> {}
-   export Model<T, A> extends Model<T, A, MyRole, MyAction> {}
+   export type MyModel<Data, Args> = Model<Data, Args, MyAction, MyRole>;
 ```
 
 ## Design Concerns
