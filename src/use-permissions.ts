@@ -1,12 +1,12 @@
-import { get, patch } from "./model-api-request";
+import { get, patch } from "./model-api-request.js";
 import {
   ModelResponse,
   SanitizedField,
   SanitizedFieldViews,
   View,
-} from "./models";
-import { Permission } from "./permissions";
-import { makeStructureAccessible } from "./utils/types/field-accessor";
+} from "./models.js";
+import { Permission } from "./permissions.js";
+import { makeStructureAccessible } from "./utils/types/field-accessor.js";
 import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface FieldLeaf<T = unknown> {
@@ -20,7 +20,9 @@ export interface FieldLeaf<T = unknown> {
 }
 
 export type FieldAccessor<Data> = {
-  [K in keyof Data]: Data[K] extends object
+  [K in keyof Data]: Data[K] extends unknown[]
+    ? FieldLeaf<Data[K]>
+    : Data[K] extends object
     ? FieldAccessor<Data[K]>
     : FieldLeaf<Data[K]>;
 };
@@ -71,10 +73,10 @@ function applyUpdatesToFields<Data>(
     let current: Record<string, unknown> = newFields as Record<string, unknown>;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      current = current[keys[i]] as Record<string, unknown>;
+      current = current[keys[i]!] as Record<string, unknown>;
     }
 
-    const finalKey = keys[keys.length - 1];
+    const finalKey = keys[keys.length - 1]!;
     const target = current[finalKey];
     if (target && typeof target === "object" && "value" in target) {
       (target as FieldLeaf).value = newValue;
@@ -95,14 +97,14 @@ export function buildUpdatePayload<Data>(
     let current = result;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
+      const key = keys[i]!;
       if (!(key in current)) {
         current[key] = {};
       }
       current = current[key] as Record<string, unknown>;
     }
 
-    current[keys[keys.length - 1]] = value;
+    current[keys[keys.length - 1]!] = value;
   }
 
   return result as Partial<Data>;
@@ -138,6 +140,11 @@ export default function usePermissions<Data, Args, Action, Role>({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | undefined>();
   const pendingUpdates = useRef<FieldUpdate[]>([]);
+  const fieldsRef = useRef(fields);
+
+  useEffect(() => {
+    fieldsRef.current = fields;
+  }, [fields]);
 
   const argsKey = JSON.stringify(args);
   const optimistic = view.config?.optimisticUpdates !== false;
@@ -156,10 +163,13 @@ export default function usePermissions<Data, Args, Action, Role>({
         }
 
         const params = new URLSearchParams();
+        const paramKeys = view.endpoints.get.params;
         if (args) {
           for (const [key, value] of Object.entries(args)) {
             if (value !== undefined && value !== null) {
-              params.append(key, String(value));
+              if (!paramKeys || paramKeys.includes(key as keyof Args)) {
+                params.append(key, String(value));
+              }
             }
           }
         }
@@ -191,7 +201,7 @@ export default function usePermissions<Data, Args, Action, Role>({
     return () => {
       cancelled = true;
     };
-  }, [argsKey]);
+  }, [argsKey, view.endpoints.get?.url, view.endpoints.url]);
 
   const update = useCallback(
     <T>(...updates: FieldUpdate<T>[]) => {
@@ -230,7 +240,7 @@ export default function usePermissions<Data, Args, Action, Role>({
   const push = useCallback(async () => {
     if (pendingUpdates.current.length === 0) return;
 
-    const previousFields = fields;
+    const snapshotFields = fieldsRef.current;
     const payload = buildUpdatePayload<Data>(pendingUpdates.current);
     pendingUpdates.current = [];
 
@@ -266,13 +276,13 @@ export default function usePermissions<Data, Args, Action, Role>({
         setError(undefined);
       }
     } catch (err) {
-      if (previousFields) {
-        setFields(previousFields);
+      if (snapshotFields) {
+        setFields(snapshotFields);
       }
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
     }
-  }, [view.endpoints, args, fields]);
+  }, [view.endpoints, args]);
 
   return { response, fields, actions, isLoading, error, update, flush: push };
 }

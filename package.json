@@ -1,14 +1,15 @@
 {
-  "name": "<project_name>",
+  "name": "ropac",
   "version": "1.0.0",
-  "description": "<project_description>",
+  "description": "Role-based permission and access control library for React",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
@@ -18,29 +19,30 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "dev": "tsx --watch src/index.ts",
-    "build": "tsc"
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PaxtonTerryDev/<project_repo_name>.git"
+    "url": "git+https://github.com/PaxtonTerryDev/ropac.git"
   },
   "author": "PaxtonTerryDev",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/PaxtonTerryDev/<project_repo_name>/issues"
+    "url": "https://github.com/PaxtonTerryDev/ropac/issues"
   },
-  "homepage": "https://github.com/PaxtonTerryDev/<project_repo_name>#readme",
+  "homepage": "https://github.com/PaxtonTerryDev/ropac#readme",
   "devDependencies": {
     "@types/node": "^25.0.9",
+    "@types/react": "^19.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
-  "dependencies": {
-    "@paxtonterrydev/quicklog": "^1.0.2",
-    "clsx": "^2.1.1",
-    "dotenv": "^17.2.3",
-    "react": "^19.2.4",
-    "tailwind-merge": "^3.4.0"
+  "peerDependencies": {
+    "react": "^19.0.0"
   }
 }

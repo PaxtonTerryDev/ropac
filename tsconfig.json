@@ -10,9 +10,7 @@
     "module": "nodenext",
     "target": "esnext",
     // For nodejs:
-    "lib": ["esnext"],
-    "types": ["node"],
-    // and npm install -D @types/node
+    "lib": ["esnext", "dom"],
 
     // Other Outputs
     "sourceMap": true,
