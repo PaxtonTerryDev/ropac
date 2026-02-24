@@ -44,6 +44,10 @@ export async function get<Data, Action>(
     method: "GET",
     ...(headers && { headers }),
   });
+  if (!response.ok) {
+    const body = await response.text().catch(() => response.statusText);
+    throw new Error(`${response.status}: ${body}`);
+  }
   return response.json() as Promise<ModelResponse<Data, Action>>;
 }
 
@@ -55,8 +59,12 @@ export async function post<Data, Action>(
   const response = await fetch(url, {
     method: "POST",
     body: JSON.stringify({ data }),
-    ...(headers && { headers }),
+    headers: { "Content-Type": "application/json", ...headers },
   });
+  if (!response.ok) {
+    const body = await response.text().catch(() => response.statusText);
+    throw new Error(`${response.status}: ${body}`);
+  }
   return response.json() as Promise<ModelResponse<Data, Action>>;
 }
 
@@ -68,8 +76,12 @@ export async function patch<Data, Action>(
   const response = await fetch(url, {
     method: "PATCH",
     body: JSON.stringify({ data }),
-    ...(headers && { headers }),
+    headers: { "Content-Type": "application/json", ...headers },
   });
+  if (!response.ok) {
+    const body = await response.text().catch(() => response.statusText);
+    throw new Error(`${response.status}: ${body}`);
+  }
   return response.json() as Promise<ModelResponse<Data, Action>>;
 }
 
@@ -81,8 +93,12 @@ export async function put<Data, Action>(
   const response = await fetch(url, {
     method: "PUT",
     body: JSON.stringify({ data }),
-    ...(headers && { headers }),
+    headers: { "Content-Type": "application/json", ...headers },
   });
+  if (!response.ok) {
+    const body = await response.text().catch(() => response.statusText);
+    throw new Error(`${response.status}: ${body}`);
+  }
   return response.json() as Promise<ModelResponse<Data, Action>>;
 }
 
@@ -94,7 +110,11 @@ export async function del<Data, Action>(
   const response = await fetch(url, {
     method: "DELETE",
     body: JSON.stringify({ data }),
-    ...(headers && { headers }),
+    headers: { "Content-Type": "application/json", ...headers },
   });
+  if (!response.ok) {
+    const body = await response.text().catch(() => response.statusText);
+    throw new Error(`${response.status}: ${body}`);
+  }
   return response.json() as Promise<ModelResponse<Data, Action>>;
 }
