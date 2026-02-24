@@ -113,6 +113,7 @@ interface PermissionsReturn<Data, Action> {
   fields: FieldAccessor<Data> | undefined;
   actions: Action[];
   isLoading: boolean;
+  error: Error | undefined;
   update: <T>(...updates: FieldUpdate<T>[]) => void;
   flush: () => Promise<void>;
 }
@@ -135,6 +136,7 @@ export default function usePermissions<Data, Args, Action, Role>({
   const [fields, setFields] = useState<FieldAccessor<Data> | undefined>();
   const [actions, setActions] = useState<Action[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<Error | undefined>();
   const pendingUpdates = useRef<FieldUpdate[]>([]);
 
   const argsKey = JSON.stringify(args);
@@ -147,34 +149,41 @@ export default function usePermissions<Data, Args, Action, Role>({
     async function fetchData() {
       setIsLoading(true);
 
-      const baseUrl = view.endpoints.get.url ?? view.endpoints.url;
-      if (!baseUrl) {
-        throw new Error("No URL defined in view endpoints");
-      }
+      try {
+        const baseUrl = view.endpoints.get.url ?? view.endpoints.url;
+        if (!baseUrl) {
+          throw new Error("No URL defined in view endpoints");
+        }
 
-      const params = new URLSearchParams();
-      if (args) {
-        for (const [key, value] of Object.entries(args)) {
-          if (value !== undefined && value !== null) {
-            params.append(key, String(value));
+        const params = new URLSearchParams();
+        if (args) {
+          for (const [key, value] of Object.entries(args)) {
+            if (value !== undefined && value !== null) {
+              params.append(key, String(value));
+            }
           }
         }
-      }
 
-      const queryString = params.toString();
-      const url = queryString ? `${baseUrl}?${queryString}` : baseUrl;
+        const queryString = params.toString();
+        const url = queryString ? `${baseUrl}?${queryString}` : baseUrl;
 
-      const result = await get<Data, Action>(url, view.endpoints.headers);
+        const result = await get<Data, Action>(url, view.endpoints.headers);
 
-      if (!cancelled && result) {
-        setResponse(result);
-        if (result.data) {
-          setFields(createFieldAccessor(result.data));
+        if (!cancelled && result) {
+          setResponse(result);
+          if (result.data) {
+            setFields(createFieldAccessor(result.data));
+          }
+          setActions(result.actions ?? []);
+          setError(undefined);
         }
-        setActions(result.actions ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-
-      setIsLoading(false);
     }
 
     fetchData();
@@ -254,14 +263,16 @@ export default function usePermissions<Data, Args, Action, Role>({
           setFields(createFieldAccessor(result.data));
         }
         setActions(result.actions ?? []);
+        setError(undefined);
       }
-    } catch (error) {
+    } catch (err) {
       if (previousFields) {
         setFields(previousFields);
       }
-      throw error;
+      setError(err instanceof Error ? err : new Error(String(err)));
+      throw err;
     }
   }, [view.endpoints, args, fields]);
 
-  return { response, fields, actions, isLoading, update, flush: push };
+  return { response, fields, actions, isLoading, error, update, flush: push };
 }

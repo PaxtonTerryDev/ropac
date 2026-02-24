@@ -350,9 +350,9 @@ export class ControllerInstance<Data, Args, Action, Role> {
   ): Promise<ModelResponse<Data, Action>> {
     const currentData = await this.controller.getData(args);
     const roles = await this.handleRoles(currentData, args);
-    const appliedPermissions = await this.handlePermissions(currentData, roles);
+    const appliedPermissions = await this.handlePermissions(currentData, roles, args);
 
-    this.validateUpdatePermissions(updateData, appliedPermissions);
+    this.validateUpdatePermissions(updateData, currentData, appliedPermissions);
 
     const updatedData = await this.controller.updateData(updateData, args);
     const updatedPermissions = await this.handlePermissions(
@@ -377,20 +377,19 @@ export class ControllerInstance<Data, Args, Action, Role> {
   // TODO: Should update this to queue update errors and return them, rather than throwing immediately.
   private validateUpdatePermissions(
     updateData: Partial<Data>,
+    currentData: Data,
     appliedPermissions: AppliedPermissions<Data>,
     parentPath: string = "",
   ): void {
-    for (const [key, value] of Object.entries(updateData as object)) {
+    for (const [key, newValue] of Object.entries(updateData as object)) {
       const currentPath = parentPath ? `${parentPath}.${key}` : key;
+      const currentValue = (currentData as Record<string, unknown>)[key];
       const fieldPerms = (appliedPermissions as Record<string, unknown>)[key];
 
-      if (
-        value !== null &&
-        typeof value === "object" &&
-        !Array.isArray(value)
-      ) {
+      if (newValue !== null && typeof newValue === "object" && !Array.isArray(newValue)) {
         this.validateUpdatePermissions(
-          value as Partial<Data>,
+          newValue,
+          currentValue as Data,
           fieldPerms as AppliedPermissions<Data>,
           currentPath,
         );
@@ -398,10 +397,12 @@ export class ControllerInstance<Data, Args, Action, Role> {
         const perms = expandPermissions(
           fieldPerms as Permission[] | PermissionShorthand,
         );
-        if (!perms.includes("update")) {
-          throw new Error(
-            `Permission denied: cannot update field '${currentPath}'`,
-          );
+        if (newValue === null && currentValue !== null && currentValue !== undefined) {
+          if (!perms.includes("delete")) throw new Error(`Permission denied: cannot delete '${currentPath}'`);
+        } else if (newValue !== null && (currentValue === null || currentValue === undefined)) {
+          if (!perms.includes("create")) throw new Error(`Permission denied: cannot create '${currentPath}'`);
+        } else {
+          if (!perms.includes("update")) throw new Error(`Permission denied: cannot update '${currentPath}'`);
         }
       }
     }
@@ -411,6 +412,8 @@ export class ControllerInstance<Data, Args, Action, Role> {
     response: ModelComposite<Data, Action>,
   ): ModelResponse<Data, Action> {
     const { data, actions } = response;
+    const isFieldView = (v: unknown): v is FieldView =>
+      !!v && typeof v === "object" && "value" in (v as object) && "permissions" in (v as object);
     return {
       data: objectMap(data as object, (_key: string, objVal: unknown) => {
         const fv = objVal as FieldView;
@@ -420,7 +423,7 @@ export class ControllerInstance<Data, Args, Action, Role> {
           data: hasRead ? fv.value : null,
           permissions,
         } as SanitizedField;
-      }),
+      }, isFieldView),
       actions,
     } as ModelResponse<Data, Action>;
   }
@@ -445,5 +448,4 @@ export interface ViewConfig {
 export interface View<Data, Args, Action, Role> {
   endpoints: ModelAPIRequest<Data, Args>;
   config?: ViewConfig;
-  // derive:
 }

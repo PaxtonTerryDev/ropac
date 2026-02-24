@@ -1,21 +1,18 @@
 import { MappedObject } from "./types/mapped-object";
 
 // WARN: We are using these alot, but they are relying heavily on assertions, and we are losing a lot of compiler safety.  Need a better way to do this, or do it more safely.``
-function isField(value: unknown): boolean {
-  return isObject(value) && 'value' in (value as object) && 'permissions' in (value as object);
-}
-
 export function objectMap<BaseObj extends object, T>(
   obj: BaseObj,
-  callback: (key: string, value: unknown) => T
+  callback: (key: string, value: unknown) => T,
+  isLeaf: (value: unknown) => boolean = () => false,
 ): MappedObject<BaseObj, T> {
   const newObj: Record<string, unknown> = {};
   for (const key of Object.keys(obj)) {
     const value = (obj as Record<string, unknown>)[key];
-    if (isField(value)) {
+    if (isLeaf(value)) {
       newObj[key] = callback(key, value);
     } else if (isObject(value)) {
-      newObj[key] = objectMap(value as object, callback);
+      newObj[key] = objectMap(value as object, callback, isLeaf);
     } else {
       newObj[key] = callback(key, value);
     }
