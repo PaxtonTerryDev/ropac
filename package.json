@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "description": "Role-based permission and access control library for React",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [
@@ -18,8 +19,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "dev": "tsx --watch src/index.ts",
-    "build": "tsc"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "repository": {
     "type": "git",
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@types/node": "^25.0.9",
     "@types/react": "^19.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },

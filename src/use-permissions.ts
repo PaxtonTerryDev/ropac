@@ -73,10 +73,10 @@ function applyUpdatesToFields<Data>(
     let current: Record<string, unknown> = newFields as Record<string, unknown>;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      current = current[keys[i]] as Record<string, unknown>;
+      current = current[keys[i]!] as Record<string, unknown>;
     }
 
-    const finalKey = keys[keys.length - 1];
+    const finalKey = keys[keys.length - 1]!;
     const target = current[finalKey];
     if (target && typeof target === "object" && "value" in target) {
       (target as FieldLeaf).value = newValue;
@@ -97,14 +97,14 @@ export function buildUpdatePayload<Data>(
     let current = result;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
+      const key = keys[i]!;
       if (!(key in current)) {
         current[key] = {};
       }
       current = current[key] as Record<string, unknown>;
     }
 
-    current[keys[keys.length - 1]] = value;
+    current[keys[keys.length - 1]!] = value;
   }
 
   return result as Partial<Data>;

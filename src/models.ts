@@ -87,10 +87,10 @@ export function updatePermissionField<T extends object>(
   let current: Record<string, unknown> = permissions as Record<string, unknown>;
 
   for (let i = 0; i < keys.length - 1; i++) {
-    current = current[keys[i]] as Record<string, unknown>;
+    current = current[keys[i]!] as Record<string, unknown>;
   }
 
-  current[keys[keys.length - 1]] = value;
+  current[keys[keys.length - 1]!] = value;
 }
 
 export function updateRolePermission<R extends string>(
